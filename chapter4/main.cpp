@@ -21,7 +21,7 @@ using namespace Platform_lib;
 
 //----------------------------------------------------------------------------------------------------------------------
 
-constexpr auto image_avaiable_index {0};
+constexpr auto image_available_index {0};
 constexpr auto rendering_done_index {1};
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -37,12 +37,10 @@ public:
         queue_ {VK_NULL_HANDLE},
         command_pool_ {VK_NULL_HANDLE},
         command_buffer_ {VK_NULL_HANDLE},
-        fence_ {VK_NULL_HANDLE},
         semaphores_ {},
+        fences_ {},
         surface_ {VK_NULL_HANDLE},
-        swapchain_ {VK_NULL_HANDLE},
-        swapchain_image_extent_ {0, 0},
-        render_pass_ {VK_NULL_HANDLE}
+        swapchain_ {VK_NULL_HANDLE}
     {
         init_signals_();
         init_instance_();
@@ -53,12 +51,12 @@ public:
         init_command_pool_();
         init_command_buffer_();
         init_semaphores_();
-        init_fence_();
+        init_fences_();
     }
 
-    ~Chapter4()
+    ~Chapter3()
     {
-        fini_fence_();
+        fini_fences_();
         fini_semaphores_();
         fini_command_pool_();
         fini_device_();
@@ -275,25 +273,28 @@ private:
         }
     }
 
-    void init_fence_()
+    void init_fences_()
     {
         VkFenceCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        auto result = vkCreateFence(device_, &create_info, nullptr, &fence_);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            default:
-                break;
+        for (auto i = 0; i != 2; ++i) {
+            create_info.flags = (i == rendering_done_index) ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
+
+            auto result = vkCreateFence(device_, &create_info, nullptr, &fences_[i]);
+            switch (result) {
+                case VK_ERROR_OUT_OF_HOST_MEMORY:
+                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
+                    break;
+                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
+                    break;
+                default:
+                    break;
+            }
+            assert(result == VK_SUCCESS);
         }
-        assert(result == VK_SUCCESS);
     }
 
     void init_surface_()
@@ -368,8 +369,6 @@ private:
             }
         }
 
-        swapchain_image_extent_ = surface_capabilities.currentExtent;
-
         VkSwapchainCreateInfoKHR create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -377,7 +376,7 @@ private:
         create_info.minImageCount = 2;
         create_info.imageFormat = surface_format.format;
         create_info.imageColorSpace = surface_format.colorSpace;
-        create_info.imageExtent = swapchain_image_extent_;
+        create_info.imageExtent = surface_capabilities.currentExtent;
         create_info.imageArrayLayers = 1;
         create_info.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -462,114 +461,6 @@ private:
         vkDeviceWaitIdle(device_);
     }
 
-    void init_swapchain_image_views_()
-    {
-        auto surface_format = default_surface_format_();
-
-        VkImageViewCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        create_info.format = surface_format.format;
-        create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        create_info.subresourceRange.levelCount = 1;
-        create_info.subresourceRange.layerCount = 1;
-
-        swapchain_image_views_.resize(swapchain_images_.size());
-        for (auto i = 0; i != swapchain_images_.size(); ++i) {
-            create_info.image = swapchain_images_[i];
-
-            auto result = vkCreateImageView(device_, &create_info, nullptr, &swapchain_image_views_[i]);
-            switch (result) {
-                case VK_ERROR_OUT_OF_HOST_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                    break;
-                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                    break;
-                default:
-                    break;
-            }
-            assert(result == VK_SUCCESS);
-        }
-    }
-
-    void init_render_pass_()
-    {
-        auto surface_format = default_surface_format_();
-
-        VkAttachmentDescription attachment_desc {};
-
-        attachment_desc.format = surface_format.format;
-        attachment_desc.samples = VK_SAMPLE_COUNT_1_BIT;
-        attachment_desc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachment_desc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachment_desc.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        attachment_desc.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference color_attachment_ref {};
-
-        color_attachment_ref.attachment = 0;
-        color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription subpass_desc {};
-
-        subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass_desc.colorAttachmentCount = 1;
-        subpass_desc.pColorAttachments = &color_attachment_ref;
-
-        VkRenderPassCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        create_info.attachmentCount = 1;
-        create_info.pAttachments = &attachment_desc;
-        create_info.subpassCount = 1;
-        create_info.pSubpasses = &subpass_desc;
-
-        auto result = vkCreateRenderPass(device_, &create_info, nullptr, &render_pass_);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            default:
-                break;
-        }
-        assert(result == VK_SUCCESS);
-    }
-
-    void init_framebuffers_()
-    {
-        VkFramebufferCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        create_info.renderPass = render_pass_;
-        create_info.attachmentCount = 1;
-        create_info.width = swapchain_image_extent_.width;
-        create_info.height = swapchain_image_extent_.height;
-        create_info.layers = 1;
-
-        framebuffers_.resize(swapchain_image_views_.size());
-        for (auto i = 0; i != swapchain_image_views_.size(); ++i) {
-            create_info.pAttachments = &swapchain_image_views_[i];
-
-            auto result = vkCreateFramebuffer(device_, &create_info, nullptr, &framebuffers_[i]);
-            switch (result) {
-                case VK_ERROR_OUT_OF_HOST_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                    break;
-                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                    break;
-                default:
-                    break;
-            }
-            assert(result == VK_SUCCESS);
-        }
-    }
-
     void fini_instance_()
     {
         vkDestroyInstance(instance_, nullptr);
@@ -591,9 +482,10 @@ private:
             vkDestroySemaphore(device_, semaphore, nullptr);
     }
 
-    void fini_fence_()
+    void fini_fences_()
     {
-        vkDestroyFence(device_, fence_, nullptr);
+        for (auto& fence : fences_)
+            vkDestroyFence(device_, fence, nullptr);
     }
 
     void fini_surface_()
@@ -606,40 +498,15 @@ private:
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
     }
 
-    void fini_swapchain_image_views_()
-    {
-        for (auto& image_view : swapchain_image_views_)
-            vkDestroyImageView(device_, image_view, nullptr);
-    }
-
-    void fini_render_pass_()
-    {
-        vkDestroyRenderPass(device_, render_pass_, nullptr);
-    }
-
-    void fini_framebuffers_()
-    {
-        for (auto& framebuffer : framebuffers_)
-            vkDestroyFramebuffer(device_, framebuffer, nullptr);
-    }
-
     void on_startup()
     {
         init_surface_();
         init_swapchain_();
         init_swapchain_images_();
-        init_swapchain_image_views_();
-        init_render_pass_();
-        init_framebuffers_();
     }
 
     void on_shutdown()
     {
-        vkDeviceWaitIdle(device_);
-
-        fini_framebuffers_();
-        fini_render_pass_();
-        fini_swapchain_image_views_();
         fini_swapchain_();
         fini_surface_();
     }
@@ -648,13 +515,15 @@ private:
     {
         uint32_t swapchain_index;
         vkAcquireNextImageKHR(device_, swapchain_, 0,
-                              semaphores_[image_avaiable_index], VK_NULL_HANDLE,
+                              semaphores_[image_available_index], fences_[image_available_index],
                               &swapchain_index);
+        vkWaitForFences(device_, 1, &fences_[image_available_index], VK_TRUE, UINT64_MAX);
+        vkResetFences(device_, 1, &fences_[image_available_index]);
 
-        if (VK_NOT_READY == vkGetFenceStatus(device_, fence_))
-            vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX);
+        if (VK_NOT_READY == vkGetFenceStatus(device_, fences_[rendering_done_index]))
+            vkWaitForFences(device_, 1, &fences_[rendering_done_index], VK_TRUE, UINT64_MAX);
 
-        vkResetFences(device_, 1, &fence_);
+        vkResetFences(device_, 1, &fences_[rendering_done_index]);
         vkResetCommandBuffer(command_buffer_, 0);
 
         auto& swapchain_image = swapchain_images_[swapchain_index];
@@ -670,7 +539,7 @@ private:
 
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             barrier.srcQueueFamilyIndex = queue_family_index_;
             barrier.dstQueueFamilyIndex = queue_family_index_;
             barrier.image = swapchain_image;
@@ -679,38 +548,37 @@ private:
             barrier.subresourceRange.layerCount = 1;
 
             vkCmdPipelineBarrier(command_buffer_,
-                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                  0,
                                  0, nullptr,
                                  0, nullptr,
                                  1, &barrier);
         }
 
-        VkClearValue clear_value;
+        VkClearColorValue clear_color;
 
-        clear_value.color.float32[0] = 1.0f; // R
-        clear_value.color.float32[1] = 1.0f; // G
-        clear_value.color.float32[2] = 0.0f; // B
-        clear_value.color.float32[3] = 1.0f; // A
+        clear_color.float32[0] = 1.0f; // R
+        clear_color.float32[1] = 0.0f; // G
+        clear_color.float32[2] = 1.0f; // B
+        clear_color.float32[3] = 1.0f; // A
 
-        VkRenderPassBeginInfo render_pass_begin_info {};
+        VkImageSubresourceRange subresource_range {};
 
-        render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        render_pass_begin_info.renderPass = render_pass_;
-        render_pass_begin_info.framebuffer = framebuffers_[swapchain_index];
-        render_pass_begin_info.renderArea.extent = swapchain_image_extent_;
-        render_pass_begin_info.clearValueCount = 1;
-        render_pass_begin_info.pClearValues = &clear_value;
+        subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        subresource_range.levelCount = 1;
+        subresource_range.layerCount = 1;
 
-        vkCmdBeginRenderPass(command_buffer_, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
-
-        vkCmdEndRenderPass(command_buffer_);
+        vkCmdClearColorImage(command_buffer_,
+                             swapchain_image,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             &clear_color, 1,
+                             &subresource_range);
 
         {
             VkImageMemoryBarrier barrier {};
 
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             barrier.srcQueueFamilyIndex = queue_family_index_;
             barrier.dstQueueFamilyIndex = queue_family_index_;
@@ -720,7 +588,7 @@ private:
             barrier.subresourceRange.layerCount = 1;
 
             vkCmdPipelineBarrier(command_buffer_,
-                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                                  0,
                                  0, nullptr,
                                  0, nullptr,
@@ -735,14 +603,14 @@ private:
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submit_info.waitSemaphoreCount = 1;
-        submit_info.pWaitSemaphores = &semaphores_[image_avaiable_index];
+        submit_info.pWaitSemaphores = &semaphores_[image_available_index];
         submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer_;
         submit_info.signalSemaphoreCount = 1;
         submit_info.pSignalSemaphores = &semaphores_[rendering_done_index];
 
-        vkQueueSubmit(queue_, 1, &submit_info, fence_);
+        vkQueueSubmit(queue_, 1, &submit_info, fences_[rendering_done_index]);
 
         // vkDeviceWaitIdle(device_);
 
@@ -767,15 +635,11 @@ private:
     VkQueue queue_;
     VkCommandPool command_pool_;
     VkCommandBuffer command_buffer_;
-    VkFence fence_;
+    std::array<VkFence, 2> fences_;
     std::array<VkSemaphore, 2> semaphores_;
     VkSurfaceKHR surface_;
     VkSwapchainKHR swapchain_;
     vector<VkImage> swapchain_images_;
-    VkExtent2D swapchain_image_extent_;
-    vector<VkImageView> swapchain_image_views_;
-    VkRenderPass render_pass_;
-    vector<VkFramebuffer> framebuffers_;
 };
 
 //----------------------------------------------------------------------------------------------------------------------

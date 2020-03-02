@@ -12,17 +12,11 @@
 
 #include <iostream>
 #include <vector>
-#include <array>
 #include <vulkan/vulkan.h>
 #include <platform/Window.h>
 
 using namespace std;
 using namespace Platform_lib;
-
-//----------------------------------------------------------------------------------------------------------------------
-
-constexpr auto image_avaiable_index {0};
-constexpr auto rendering_done_index {1};
 
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -37,27 +31,24 @@ public:
         queue_ {VK_NULL_HANDLE},
         command_pool_ {VK_NULL_HANDLE},
         command_buffer_ {VK_NULL_HANDLE},
-        semaphores_ {},
-        fences_ {},
         surface_ {VK_NULL_HANDLE},
         swapchain_ {VK_NULL_HANDLE}
     {
         init_signals_();
+        print_instance_layers_();
+        print_instance_extensions_();
         init_instance_();
         find_best_physical_device_();
         find_queue_family_index_();
+        print_device_extensions_();
         init_device_();
         init_queue_();
         init_command_pool_();
         init_command_buffer_();
-        init_semaphores_();
-        init_fences_();
     }
 
     ~Chapter3()
     {
-        fini_fences_();
-        fini_semaphores_();
         fini_command_pool_();
         fini_device_();
         fini_instance_();
@@ -69,6 +60,36 @@ private:
         window_->startup_signal.connect(this, &Chapter3::on_startup);
         window_->shutdown_signal.connect(this, &Chapter3::on_shutdown);
         window_->render_signal.connect(this, &Chapter3::on_render);
+    }
+
+    void print_instance_layers_()
+    {
+        uint32_t count {0};
+        vkEnumerateInstanceLayerProperties(&count, nullptr);
+
+        vector<VkLayerProperties> properties {count};
+        vkEnumerateInstanceLayerProperties(&count, &properties[0]);
+
+        for (auto& props : properties) {
+            cout << "Layer Name             : " << props.layerName             << '\n'
+                 << "Spec Version           : " << props.specVersion           << '\n'
+                 << "Implementation Version : " << props.implementationVersion << '\n'
+                 << "Description            : " << props.description           << '\n' << endl;
+        }
+    }
+
+    void print_instance_extensions_()
+    {
+        uint32_t count {0};
+        vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
+
+        vector<VkExtensionProperties> properties {count};
+        vkEnumerateInstanceExtensionProperties(nullptr, &count, &properties[0]);
+
+        for (auto& props : properties) {
+            cout << "Extension Name : " << props.extensionName << '\n'
+                 << "Spec Version   : " << props.specVersion   << '\n' << endl;
+        }
     }
 
     void init_instance_()
@@ -124,6 +145,8 @@ private:
         for (auto &physical_device : physical_devices) {
             VkPhysicalDeviceProperties properties;
             vkGetPhysicalDeviceProperties(physical_device, &properties);
+
+            cout << "Device Name : " << properties.deviceName << '\n' << endl;
         }
 
         physical_device_ = physical_devices[0];
@@ -147,6 +170,20 @@ private:
             }
         }
         assert(queue_family_index_ != UINT32_MAX);
+    }
+
+    void print_device_extensions_()
+    {
+        uint32_t count {0};
+        vkEnumerateDeviceExtensionProperties(physical_device_, nullptr, &count, nullptr);
+
+        vector<VkExtensionProperties> properties {count};
+        vkEnumerateDeviceExtensionProperties(physical_device_, nullptr, &count, &properties[0]);
+
+        for (auto& props : properties) {
+            cout << "Extension Name : " << props.extensionName << '\n'
+                 << "Spec Version   : " << props.specVersion   << '\n' << endl;
+        }
     }
 
     void init_device_()
@@ -251,52 +288,6 @@ private:
         assert(result == VK_SUCCESS);
     }
 
-    void init_semaphores_()
-    {
-        VkSemaphoreCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        for (auto& semaphore : semaphores_) {
-            auto result = vkCreateSemaphore(device_, &create_info, nullptr, &semaphore);
-            switch (result) {
-                case VK_ERROR_OUT_OF_HOST_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                    break;
-                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                    break;
-                default:
-                    break;
-            }
-            assert(result == VK_SUCCESS);
-        }
-    }
-
-    void init_fences_()
-    {
-        VkFenceCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-
-        for (auto i = 0; i != 2; ++i) {
-            create_info.flags = (i == rendering_done_index) ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
-
-            auto result = vkCreateFence(device_, &create_info, nullptr, &fences_[i]);
-            switch (result) {
-                case VK_ERROR_OUT_OF_HOST_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                    break;
-                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                    break;
-                default:
-                    break;
-            }
-            assert(result == VK_SUCCESS);
-        }
-    }
-
     void init_surface_()
     {
 #if defined(__APPLE__)
@@ -339,6 +330,35 @@ private:
         VkBool32 supported;
         vkGetPhysicalDeviceSurfaceSupportKHR(physical_device_, queue_family_index_, surface_, &supported);
         assert(supported == VK_TRUE);
+    }
+
+    void print_present_modes_()
+    {
+        uint32_t count;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device_, surface_, &count, nullptr);
+
+        vector<VkPresentModeKHR> modes {count};
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device_, surface_, &count, &modes[0]);
+
+        for (auto& mode : modes) {
+            switch (mode) {
+                case VK_PRESENT_MODE_IMMEDIATE_KHR:
+                    cout << "VK_PRESENT_MODE_IMMEDIATE_KHR" << '\n';
+                    break;
+                case VK_PRESENT_MODE_MAILBOX_KHR:
+                    cout << "VK_PRESENT_MODE_MAILBOX_KHR" << '\n';
+                    break;
+                case VK_PRESENT_MODE_FIFO_KHR:
+                    cout << "VK_PRESENT_MODE_FIFO_KHR" << '\n';
+                    break;
+                case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+                    cout << "VK_PRESENT_MODE_FIFO_RELAXED_KHR" << '\n';
+                    break;
+                default:
+                    break;
+            }
+            cout << endl;
+        }
     }
 
     auto default_surface_format_()
@@ -421,6 +441,7 @@ private:
         VkCommandBufferBeginInfo begin_info {};
 
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         vkBeginCommandBuffer(command_buffer_, &begin_info);
 
@@ -476,18 +497,6 @@ private:
         vkDestroyCommandPool(device_, command_pool_, nullptr);
     }
 
-    void fini_semaphores_()
-    {
-        for (auto& semaphore : semaphores_)
-            vkDestroySemaphore(device_, semaphore, nullptr);
-    }
-
-    void fini_fences_()
-    {
-        for (auto& fence : fences_)
-            vkDestroyFence(device_, fence, nullptr);
-    }
-
     void fini_surface_()
     {
         vkDestroySurfaceKHR(instance_, surface_, nullptr);
@@ -501,6 +510,7 @@ private:
     void on_startup()
     {
         init_surface_();
+        print_present_modes_();
         init_swapchain_();
         init_swapchain_images_();
     }
@@ -514,23 +524,16 @@ private:
     void on_render()
     {
         uint32_t swapchain_index;
-        vkAcquireNextImageKHR(device_, swapchain_, 0,
-                              semaphores_[image_avaiable_index], fences_[image_avaiable_index],
-                              &swapchain_index);
-        vkWaitForFences(device_, 1, &fences_[image_avaiable_index], VK_TRUE, UINT64_MAX);
-        vkResetFences(device_, 1, &fences_[image_avaiable_index]);
-
-        if (VK_NOT_READY == vkGetFenceStatus(device_, fences_[rendering_done_index]))
-            vkWaitForFences(device_, 1, &fences_[rendering_done_index], VK_TRUE, UINT64_MAX);
-
-        vkResetFences(device_, 1, &fences_[rendering_done_index]);
-        vkResetCommandBuffer(command_buffer_, 0);
+        vkAcquireNextImageKHR(device_, swapchain_, 0, VK_NULL_HANDLE, VK_NULL_HANDLE, &swapchain_index);
 
         auto& swapchain_image = swapchain_images_[swapchain_index];
+
+        vkResetCommandBuffer(command_buffer_, 0);
 
         VkCommandBufferBeginInfo begin_info {};
 
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         vkBeginCommandBuffer(command_buffer_, &begin_info);
 
@@ -571,7 +574,8 @@ private:
         vkCmdClearColorImage(command_buffer_,
                              swapchain_image,
                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             &clear_color, 1,
+                             &clear_color,
+                             1,
                              &subresource_range);
 
         {
@@ -597,28 +601,18 @@ private:
 
         vkEndCommandBuffer(command_buffer_);
 
-        constexpr VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
         VkSubmitInfo submit_info {};
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submit_info.waitSemaphoreCount = 1;
-        submit_info.pWaitSemaphores = &semaphores_[image_avaiable_index];
-        submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer_;
-        submit_info.signalSemaphoreCount = 1;
-        submit_info.pSignalSemaphores = &semaphores_[rendering_done_index];
 
-        vkQueueSubmit(queue_, 1, &submit_info, fences_[rendering_done_index]);
-
-        // vkDeviceWaitIdle(device_);
+        vkQueueSubmit(queue_, 1, &submit_info, VK_NULL_HANDLE);
+        vkDeviceWaitIdle(device_);
 
         VkPresentInfoKHR present_info {};
 
         present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        present_info.waitSemaphoreCount = 1;
-        present_info.pWaitSemaphores = &semaphores_[rendering_done_index];
         present_info.swapchainCount = 1;
         present_info.pSwapchains = &swapchain_;
         present_info.pImageIndices = &swapchain_index;
@@ -635,8 +629,6 @@ private:
     VkQueue queue_;
     VkCommandPool command_pool_;
     VkCommandBuffer command_buffer_;
-    std::array<VkFence, 2> fences_;
-    std::array<VkSemaphore, 2> semaphores_;
     VkSurfaceKHR surface_;
     VkSwapchainKHR swapchain_;
     vector<VkImage> swapchain_images_;

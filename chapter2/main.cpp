@@ -29,8 +29,6 @@ public:
         queue_family_index_ {UINT32_MAX},
         device_ {VK_NULL_HANDLE},
         queue_ {VK_NULL_HANDLE},
-        command_pool_ {VK_NULL_HANDLE},
-        command_buffer_ {VK_NULL_HANDLE},
         surface_ {VK_NULL_HANDLE},
         swapchain_ {VK_NULL_HANDLE}
     {
@@ -43,13 +41,10 @@ public:
         print_device_extensions_();
         init_device_();
         init_queue_();
-        init_command_pool_();
-        init_command_buffer_();
     }
 
     ~Chapter2()
     {
-        fini_command_pool_();
         fini_device_();
         fini_instance_();
     }
@@ -243,51 +238,6 @@ private:
         vkGetDeviceQueue(device_, queue_family_index_, 0, &queue_);
     }
 
-    void init_command_pool_()
-    {
-        VkCommandPoolCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        create_info.queueFamilyIndex = queue_family_index_;
-
-        auto result = vkCreateCommandPool(device_, &create_info, nullptr, &command_pool_);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            default:
-                break;
-        }
-        assert(result == VK_SUCCESS);
-    }
-
-    void init_command_buffer_()
-    {
-        VkCommandBufferAllocateInfo allocate_info {};
-
-        allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocate_info.commandPool = command_pool_;
-        allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocate_info.commandBufferCount = 1;
-
-        auto result = vkAllocateCommandBuffers(device_, &allocate_info, &command_buffer_);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            default:
-                break;
-        }
-        assert(result == VK_SUCCESS);
-    }
-
     void init_surface_()
     {
 #if defined(__APPLE__)
@@ -398,7 +348,7 @@ private:
         create_info.imageColorSpace = surface_format.colorSpace;
         create_info.imageExtent = surface_capabilities.currentExtent;
         create_info.imageArrayLayers = 1;
-        create_info.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         create_info.preTransform = surface_capabilities.currentTransform;
         create_info.compositeAlpha = composite_alpha;
@@ -437,49 +387,6 @@ private:
 
         swapchain_images_.resize(count);
         vkGetSwapchainImagesKHR(device_, swapchain_, &count, &swapchain_images_[0]);
-
-        VkCommandBufferBeginInfo begin_info {};
-
-        begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-        vkBeginCommandBuffer(command_buffer_, &begin_info);
-
-        vector<VkImageMemoryBarrier> barriers;
-        for (auto& image : swapchain_images_) {
-            VkImageMemoryBarrier barrier {};
-
-            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            barrier.srcQueueFamilyIndex = queue_family_index_;
-            barrier.dstQueueFamilyIndex = queue_family_index_;
-            barrier.image = image;
-            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.layerCount = 1;
-
-            barriers.push_back(barrier);
-        }
-
-        vkCmdPipelineBarrier(command_buffer_,
-                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                             0,
-                             0, nullptr,
-                             0, nullptr,
-                             barriers.size(), &barriers[0]);
-
-        vkEndCommandBuffer(command_buffer_);
-
-        VkSubmitInfo submit_info {};
-
-        submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submit_info.commandBufferCount = 1;
-        submit_info.pCommandBuffers = &command_buffer_;
-
-        vkQueueSubmit(queue_, 1, &submit_info, VK_NULL_HANDLE);
-
-        vkDeviceWaitIdle(device_);
     }
 
     void fini_instance_()
@@ -490,11 +397,6 @@ private:
     void fini_device_()
     {
         vkDestroyDevice(device_, nullptr);
-    }
-
-    void fini_command_pool_()
-    {
-        vkDestroyCommandPool(device_, command_pool_, nullptr);
     }
 
     void fini_surface_()
@@ -523,101 +425,6 @@ private:
 
     void on_render()
     {
-        uint32_t swapchain_index;
-        vkAcquireNextImageKHR(device_, swapchain_, 0, VK_NULL_HANDLE, VK_NULL_HANDLE, &swapchain_index);
-
-        auto& swapchain_image = swapchain_images_[swapchain_index];
-
-        vkResetCommandBuffer(command_buffer_, 0);
-
-        VkCommandBufferBeginInfo begin_info {};
-
-        begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-        vkBeginCommandBuffer(command_buffer_, &begin_info);
-
-        {
-            VkImageMemoryBarrier barrier {};
-
-            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barrier.srcQueueFamilyIndex = queue_family_index_;
-            barrier.dstQueueFamilyIndex = queue_family_index_;
-            barrier.image = swapchain_image;
-            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.layerCount = 1;
-
-            vkCmdPipelineBarrier(command_buffer_,
-                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 0,
-                                 0, nullptr,
-                                 0, nullptr,
-                                 1, &barrier);
-        }
-
-        VkClearColorValue clear_color;
-
-        clear_color.float32[0] = 1.0f; // R
-        clear_color.float32[1] = 0.0f; // G
-        clear_color.float32[2] = 1.0f; // B
-        clear_color.float32[3] = 1.0f; // A
-
-        VkImageSubresourceRange subresource_range {};
-
-        subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        subresource_range.levelCount = 1;
-        subresource_range.layerCount = 1;
-
-        vkCmdClearColorImage(command_buffer_,
-                             swapchain_image,
-                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             &clear_color,
-                             1,
-                             &subresource_range);
-
-        {
-            VkImageMemoryBarrier barrier {};
-
-            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            barrier.srcQueueFamilyIndex = queue_family_index_;
-            barrier.dstQueueFamilyIndex = queue_family_index_;
-            barrier.image = swapchain_image;
-            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.layerCount = 1;
-
-            vkCmdPipelineBarrier(command_buffer_,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                                 0,
-                                 0, nullptr,
-                                 0, nullptr,
-                                 1, &barrier);
-        }
-
-        vkEndCommandBuffer(command_buffer_);
-
-        VkSubmitInfo submit_info {};
-
-        submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submit_info.commandBufferCount = 1;
-        submit_info.pCommandBuffers = &command_buffer_;
-
-        vkQueueSubmit(queue_, 1, &submit_info, VK_NULL_HANDLE);
-        vkDeviceWaitIdle(device_);
-
-        VkPresentInfoKHR present_info {};
-
-        present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        present_info.swapchainCount = 1;
-        present_info.pSwapchains = &swapchain_;
-        present_info.pImageIndices = &swapchain_index;
-
-        vkQueuePresentKHR(queue_, &present_info);
     }
 
 private:
@@ -627,8 +434,6 @@ private:
     uint32_t queue_family_index_;
     VkDevice device_;
     VkQueue queue_;
-    VkCommandPool command_pool_;
-    VkCommandBuffer command_buffer_;
     VkSurfaceKHR surface_;
     VkSwapchainKHR swapchain_;
     vector<VkImage> swapchain_images_;
