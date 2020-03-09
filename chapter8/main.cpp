@@ -1145,8 +1145,6 @@ private:
 
         vkQueueSubmit(queue_, 1, &submit_info, fence_);
 
-        // vkDeviceWaitIdle(device_);
-
         VkPresentInfoKHR present_info {};
 
         present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1191,7 +1189,7 @@ int main(int argc, char* argv[])
 {
     Window_desc window_desc;
 
-    window_desc.title = L"Chapter6"s;
+    window_desc.title = L"Chapter8"s;
     window_desc.extent = {512, 512, 1};
 
     Window window {window_desc};

@@ -972,8 +972,6 @@ private:
 
         vkQueueSubmit(queue_, 1, &submit_info, fence_);
 
-        // vkDeviceWaitIdle(device_);
-
         VkPresentInfoKHR present_info {};
 
         present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
