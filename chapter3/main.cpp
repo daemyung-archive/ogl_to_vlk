@@ -35,12 +35,9 @@ public:
         swapchain_ {VK_NULL_HANDLE}
     {
         init_signals_();
-        print_instance_layers_();
-        print_instance_extensions_();
         init_instance_();
         find_best_physical_device_();
         find_queue_family_index_();
-        print_device_extensions_();
         init_device_();
         init_queue_();
         init_command_pool_();
@@ -60,36 +57,6 @@ private:
         window_->startup_signal.connect(this, &Chapter3::on_startup);
         window_->shutdown_signal.connect(this, &Chapter3::on_shutdown);
         window_->render_signal.connect(this, &Chapter3::on_render);
-    }
-
-    void print_instance_layers_()
-    {
-        uint32_t count {0};
-        vkEnumerateInstanceLayerProperties(&count, nullptr);
-
-        vector<VkLayerProperties> properties {count};
-        vkEnumerateInstanceLayerProperties(&count, &properties[0]);
-
-        for (auto& props : properties) {
-            cout << "Layer Name             : " << props.layerName             << '\n'
-                 << "Spec Version           : " << props.specVersion           << '\n'
-                 << "Implementation Version : " << props.implementationVersion << '\n'
-                 << "Description            : " << props.description           << '\n' << endl;
-        }
-    }
-
-    void print_instance_extensions_()
-    {
-        uint32_t count {0};
-        vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
-
-        vector<VkExtensionProperties> properties {count};
-        vkEnumerateInstanceExtensionProperties(nullptr, &count, &properties[0]);
-
-        for (auto& props : properties) {
-            cout << "Extension Name : " << props.extensionName << '\n'
-                 << "Spec Version   : " << props.specVersion   << '\n' << endl;
-        }
     }
 
     void init_instance_()
@@ -172,20 +139,6 @@ private:
         assert(queue_family_index_ != UINT32_MAX);
     }
 
-    void print_device_extensions_()
-    {
-        uint32_t count {0};
-        vkEnumerateDeviceExtensionProperties(physical_device_, nullptr, &count, nullptr);
-
-        vector<VkExtensionProperties> properties {count};
-        vkEnumerateDeviceExtensionProperties(physical_device_, nullptr, &count, &properties[0]);
-
-        for (auto& props : properties) {
-            cout << "Extension Name : " << props.extensionName << '\n'
-                 << "Spec Version   : " << props.specVersion   << '\n' << endl;
-        }
-    }
-
     void init_device_()
     {
         constexpr auto priority = 1.0f;
@@ -198,7 +151,7 @@ private:
         queue_create_info.pQueuePriorities = &priority;
 
         vector<const char*> extension_names {
-                "VK_KHR_swapchain",
+            "VK_KHR_swapchain",
         };
 
         VkDeviceCreateInfo create_info {};
@@ -245,12 +198,14 @@ private:
 
     void init_command_pool_()
     {
+        // 생성할 커맨드 풀을 정의한다.
         VkCommandPoolCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         create_info.queueFamilyIndex = queue_family_index_;
 
+        // 커맨드 풀을 생성한다.
         auto result = vkCreateCommandPool(device_, &create_info, nullptr, &command_pool_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -267,6 +222,7 @@ private:
 
     void init_command_buffer_()
     {
+        // 생성할 커맨드 버퍼를 정의한다.
         VkCommandBufferAllocateInfo allocate_info {};
 
         allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -274,6 +230,7 @@ private:
         allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocate_info.commandBufferCount = 1;
 
+        // 커맨드 버퍼를 생성한다.
         auto result = vkAllocateCommandBuffers(device_, &allocate_info, &command_buffer_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -438,13 +395,17 @@ private:
         swapchain_images_.resize(count);
         vkGetSwapchainImagesKHR(device_, swapchain_, &count, &swapchain_images_[0]);
 
+        // 커맨드를 기록하기 위해 커맨드 버퍼의 사용목적을 정의한다.
         VkCommandBufferBeginInfo begin_info {};
 
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+        // 커맨드 버퍼에 커맨드 기록을 시작한다.
         vkBeginCommandBuffer(command_buffer_, &begin_info);
 
+        // 스왑체인 이미지의 레이아웃을 PRESENT_SRC로 변경하는 베리어를 정의한다.
+        // PRESENT_SRC로 변경하는 이유는 렌더링을 위한 커맨드를 단순화하기 위해서이다.
         vector<VkImageMemoryBarrier> barriers;
         for (auto& image : swapchain_images_) {
             VkImageMemoryBarrier barrier {};
@@ -462,6 +423,7 @@ private:
             barriers.push_back(barrier);
         }
 
+        // 정의된 베리어를 실행하는 커맨드를 커맨드 버퍼에 기록한다.
         vkCmdPipelineBarrier(command_buffer_,
                              VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                              0,
@@ -469,16 +431,20 @@ private:
                              0, nullptr,
                              barriers.size(), &barriers[0]);
 
+        // 커맨드 버퍼에 커맨드 기록을 끝마친다.
         vkEndCommandBuffer(command_buffer_);
 
+        // 어떤 기록된 커맨드를 큐에 제출할지 정의한다.
         VkSubmitInfo submit_info {};
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer_;
 
+        // 기록된 커맨드를 큐에 제출한다.
         vkQueueSubmit(queue_, 1, &submit_info, VK_NULL_HANDLE);
 
+        // 커맨드 버퍼들이 모두 처리될 때까지 기다린다.
         vkDeviceWaitIdle(device_);
     }
 
@@ -523,21 +489,29 @@ private:
 
     void on_render()
     {
+        // 지금 출력가능한 스왑체인 이미지의 인덱스를 가져온다.
         uint32_t swapchain_index;
         vkAcquireNextImageKHR(device_, swapchain_, 0, VK_NULL_HANDLE, VK_NULL_HANDLE, &swapchain_index);
 
         auto& swapchain_image = swapchain_images_[swapchain_index];
 
+        // 커맨드 버퍼에 기록된 커맨드를 리셋한다.
         vkResetCommandBuffer(command_buffer_, 0);
 
+        // 지금 어플리케이션에선 기록된 커맨드가 바뀌지 않기 때문에 커맨드 버퍼에 커맨드를 다시 기록할 필요는 없다.
+
+        // 커맨드를 기록하기 위해 커맨드 버퍼의 사용목적을 정의한다.
         VkCommandBufferBeginInfo begin_info {};
 
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+        // 커맨드 버퍼에 커맨드 기록을 시작한다.
         vkBeginCommandBuffer(command_buffer_, &begin_info);
 
         {
+            // 이미지의 베리어를 정의한다.
+            // vkCmdClearColorImage를 사용하기 위해선 이미지의 레이아웃이 반드시 SHARED_PRESENT_KHR, GENERAL, TRANSFER_DST_OPTIMAL 중 하나이어야 한다.
             VkImageMemoryBarrier barrier {};
 
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -550,6 +524,7 @@ private:
             barrier.subresourceRange.levelCount = 1;
             barrier.subresourceRange.layerCount = 1;
 
+            // 정의된 배리어를 커맨드로 기록한다.
             vkCmdPipelineBarrier(command_buffer_,
                                  VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                  0,
@@ -558,6 +533,7 @@ private:
                                  1, &barrier);
         }
 
+        // 클리어 색상을 정의한다.
         VkClearColorValue clear_color;
 
         clear_color.float32[0] = 1.0f; // R
@@ -565,12 +541,14 @@ private:
         clear_color.float32[2] = 1.0f; // B
         clear_color.float32[3] = 1.0f; // A
 
+        // 클리어할 이미지의 영역을 정의한다.
         VkImageSubresourceRange subresource_range {};
 
         subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         subresource_range.levelCount = 1;
         subresource_range.layerCount = 1;
 
+        // 정의된 영역에 정의된 색상으로 클리어하는 커맨드를 기록한다.
         vkCmdClearColorImage(command_buffer_,
                              swapchain_image,
                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -579,6 +557,8 @@ private:
                              &subresource_range);
 
         {
+            // 이미지의 베리어를 정의한다.
+            // 화면에 출력하기 위해선 이미지의 레이아웃이 반드시 PRESENT_SRC_KHR, SHARED_PRESENT_KHR 중 하나이어야 한다.
             VkImageMemoryBarrier barrier {};
 
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -591,6 +571,7 @@ private:
             barrier.subresourceRange.levelCount = 1;
             barrier.subresourceRange.layerCount = 1;
 
+            // 정의된 배리어를 커맨드로 기록한다.
             vkCmdPipelineBarrier(command_buffer_,
                                  VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                                  0,
@@ -599,17 +580,23 @@ private:
                                  1, &barrier);
         }
 
+        // 커맨드 버퍼의 커맨드 기록을 끝마친다.
         vkEndCommandBuffer(command_buffer_);
 
+        // 어떤 기록된 커맨드를 큐에 제출할지 정의한다.
         VkSubmitInfo submit_info {};
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer_;
 
+        // 기록된 커맨드를 큐에 제출한다.
         vkQueueSubmit(queue_, 1, &submit_info, VK_NULL_HANDLE);
+
+        // 커맨드 버퍼들이 모두 처리될 때까지 기다린다.
         vkDeviceWaitIdle(device_);
 
+        // 화면에 출력될 스왑체인 이미지를 정의한다.
         VkPresentInfoKHR present_info {};
 
         present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -617,6 +604,7 @@ private:
         present_info.pSwapchains = &swapchain_;
         present_info.pImageIndices = &swapchain_index;
 
+        // 정의된 스왑체인 이미지를 출력한다.
         vkQueuePresentKHR(queue_, &present_info);
     }
 
