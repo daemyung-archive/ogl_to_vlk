@@ -253,10 +253,14 @@ private:
 
     void init_semaphores_()
     {
+        // 생성할 세마포어를 정의한다.
         VkSemaphoreCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
+        // 2개의 세마포어를 생성한다. 세마포어는 GPU와 GPU의 동기화를 위해 사용된다.
+        // 첫번째 세마포어는 프레젠트 엔진으로 부터 이미지가 사용가능한 타이밍을 알기 위해 사용된다. 세마포어가 시그널 된 후 렌더링을 시작할 수 있다.
+        // 두번째 세마포어는 큐에 제출된 커맨드 버퍼가 모두 처리된 타이밍을 알기 위해 사용된다. 세마포어가 시그널 된 후 화면에 출력할 수 있다.
         for (auto& semaphore : semaphores_) {
             auto result = vkCreateSemaphore(device_, &create_info, nullptr, &semaphore);
             switch (result) {
@@ -275,10 +279,14 @@ private:
 
     void init_fences_()
     {
+        // 생성할 펜스를 정의한다.
         VkFenceCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 
+        // 2개의 펜스를 생성한다. 펜스는 GPU와 CPU의 동기화를 위해 사용된다.
+        // 첫번째 펜스 프레젠트 엔진으로 부터 이미지가 사용가능한 타이밍을 알기 위해 사용된다. 펜스가 시그널 된 후 렌더링을 시작할 수 있다.
+        // 두번째 펜스는 큐에 제출된 커맨드 버퍼가 모두 처리된 타이밍을 알기 위해 사용된다. 펜스가 시그널 된 후 화면에 출력할 수 있다.
         for (auto i = 0; i != 2; ++i) {
             create_info.flags = (i == rendering_done_index) ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
 
@@ -478,12 +486,14 @@ private:
 
     void fini_semaphores_()
     {
+        // 생성된 세마포어를 파괴한다.
         for (auto& semaphore : semaphores_)
             vkDestroySemaphore(device_, semaphore, nullptr);
     }
 
     void fini_fences_()
     {
+        // 생성된 펜스를 파괴한다.
         for (auto& fence : fences_)
             vkDestroyFence(device_, fence, nullptr);
     }
@@ -513,13 +523,22 @@ private:
 
     void on_render()
     {
+        // 프레젠트 엔진으로 부터 출력가능한 이미지의 인덱스를 얻어온다.
+        // 펜스를 통해 CPU가 언제 렌더링을 진행할 수 있을지 알 수 있다.
+        // 세마포어를 통해 GPU가 언제 렌더링을 진행할 수 있을지 알 수 있다.
+        // 함수 호출시 사용된 세마포어와 펜스는 프레젠트 엔진이 준비가 되면 시그날로 변경된다.
         uint32_t swapchain_index;
         vkAcquireNextImageKHR(device_, swapchain_, 0,
                               semaphores_[image_available_index], fences_[image_available_index],
                               &swapchain_index);
+
+        // 해당 펜스가 프레젠트 엔진으로 부터 시그날 되기까지 기다린다. 시그날이 됬다면 렌더링을 진행할 수 있다.
         vkWaitForFences(device_, 1, &fences_[image_available_index], VK_TRUE, UINT64_MAX);
         vkResetFences(device_, 1, &fences_[image_available_index]);
 
+        // 새로운 커맨드들을 기록하기 위해선 제출된 커맨드 버퍼가 모두 처리되어야만 한다.
+        // 이를 알기 위해서 커맨드 버퍼를 제출할때 펜스를 등록하고 새로 커맨드를 기록하기 전에 펜스의 상태를 가져온다.
+        // 만약 시그널이 되지 않았다면 아직 커맨드 버퍼가 GPU에서 처리중이다. 그러므로 시그널이 될때까지 기다린다.
         if (VK_NOT_READY == vkGetFenceStatus(device_, fences_[rendering_done_index]))
             vkWaitForFences(device_, 1, &fences_[rendering_done_index], VK_TRUE, UINT64_MAX);
 
@@ -602,11 +621,15 @@ private:
         VkSubmitInfo submit_info {};
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        // 렌더링을 하기 전에 프레젠트 엔진이 준비가 되어야하며 세마포어를 통해 동기화 한다.
+        // 만약 기다리지 않고 렌더링을 하게 되면 화면에 원하지 않는 결과가 출력된다.
         submit_info.waitSemaphoreCount = 1;
         submit_info.pWaitSemaphores = &semaphores_[image_available_index];
         submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer_;
+        // 화면에 출력하기 전에 렌더링이 끝난것을 기다려야한다.
+        // 만약 기다리지 않고 화면을 출력하면 화면에 원하지 않는 결과가 출력된다.
         submit_info.signalSemaphoreCount = 1;
         submit_info.pSignalSemaphores = &semaphores_[rendering_done_index];
 
@@ -615,6 +638,8 @@ private:
         VkPresentInfoKHR present_info {};
 
         present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        // 렌더링이 완료됬음을 보장하기 위해 커맨드 버퍼를 제출할 때 사용한 세마포어를 기다린다.
+        // 만약 기다리지 않고 화면을 출력하면 화면에 원하지 않는 결과가 출력된다.
         present_info.waitSemaphoreCount = 1;
         present_info.pWaitSemaphores = &semaphores_[rendering_done_index];
         present_info.swapchainCount = 1;
