@@ -54,7 +54,7 @@ public:
         init_fences_();
     }
 
-    ~Chapter3()
+    ~Chapter4()
     {
         fini_fences_();
         fini_semaphores_();
