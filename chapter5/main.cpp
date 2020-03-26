@@ -464,8 +464,11 @@ private:
 
     void init_swapchain_image_views_()
     {
+        // 파이프라인에서 이미지를 접근하기 위해선 반드시 이미지 뷰가 필요하다.
+
         auto surface_format = default_surface_format_();
 
+        // 이미지 뷰를 정의한다.
         VkImageViewCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -475,7 +478,10 @@ private:
         create_info.subresourceRange.levelCount = 1;
         create_info.subresourceRange.layerCount = 1;
 
+        // 이미지에 대응하는 이미지 뷰가 필요하다.
         swapchain_image_views_.resize(swapchain_images_.size());
+
+        // 이미지 뷰 생성.
         for (auto i = 0; i != swapchain_images_.size(); ++i) {
             create_info.image = swapchain_images_[i];
 
@@ -498,6 +504,7 @@ private:
     {
         auto surface_format = default_surface_format_();
 
+        // 렌더패스의 어테치먼트에 대해 정의한다.
         VkAttachmentDescription attachment_desc {};
 
         attachment_desc.format = surface_format.format;
@@ -507,17 +514,21 @@ private:
         attachment_desc.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         attachment_desc.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+        // 서브패스에서 렌더패스의 어떤 어테치먼트를 사용할지 정의한다.
         VkAttachmentReference color_attachment_ref {};
 
         color_attachment_ref.attachment = 0;
         color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+        // 서브패스를 정의한다.
         VkSubpassDescription subpass_desc {};
 
         subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass_desc.colorAttachmentCount = 1;
         subpass_desc.pColorAttachments = &color_attachment_ref;
 
+        // 렌더패스를 정의한다.
+        // 렌더패스는 프레임버퍼의 메모리의 정책을 정의하는 리소스이다.
         VkRenderPassCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -526,6 +537,7 @@ private:
         create_info.subpassCount = 1;
         create_info.pSubpasses = &subpass_desc;
 
+        // 렌더패스를 생성한다.
         auto result = vkCreateRenderPass(device_, &create_info, nullptr, &render_pass_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -542,6 +554,7 @@ private:
 
     void init_framebuffers_()
     {
+        // 프레임버퍼를 정의한다.
         VkFramebufferCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -551,7 +564,10 @@ private:
         create_info.height = swapchain_image_extent_.height;
         create_info.layers = 1;
 
+        // 스왑체인 이미지마다 프레임버퍼가 존재해야한다.
         framebuffers_.resize(swapchain_image_views_.size());
+
+        // 프레임 버퍼를 생성한다.
         for (auto i = 0; i != swapchain_image_views_.size(); ++i) {
             create_info.pAttachments = &swapchain_image_views_[i];
 
@@ -693,6 +709,7 @@ private:
         clear_value.color.float32[2] = 0.0f; // B
         clear_value.color.float32[3] = 1.0f; // A
 
+        // 어떤 렌더패스와 프레임버퍼를 이용하여 렌더패스를 시작할지 정의한다.
         VkRenderPassBeginInfo render_pass_begin_info {};
 
         render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -702,8 +719,10 @@ private:
         render_pass_begin_info.clearValueCount = 1;
         render_pass_begin_info.pClearValues = &clear_value;
 
+        // 정의된 렌더패스를 시작한다.
         vkCmdBeginRenderPass(command_buffer_, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
+        // 시작된 렌더패스를 종료한다.
         vkCmdEndRenderPass(command_buffer_);
 
         {
