@@ -100,9 +100,11 @@ public:
 
     void print_memory_properties()
     {
+        // VkPhysicalDevice로부터 사용가능한 디바이스 메모리의 성질을 쿼리한다.
         VkPhysicalDeviceMemoryProperties properties;
         vkGetPhysicalDeviceMemoryProperties(physical_device_, &properties);
 
+        // 사용가능한 디바이스 메모리의 성질을 출력한다.
         for (auto i = 0; i != VK_MAX_MEMORY_TYPES; ++i) {
             auto heap_index = properties.memoryTypes[i].heapIndex;
 
@@ -110,6 +112,9 @@ public:
                  << '\t' << properties.memoryTypes[i] << '\n'
                  << '\t' << properties.memoryHeaps[heap_index] << '\n';
         }
+
+        // 디바이스 메모리는 DRAM, VRAM에 각각 위치할 수 있으며 타입마다 각 특징이 다르다.
+        // 그러므로 반드시 각각의 특징을 이해하고 올바른 디바이스 메모리 타입을 선택해야한다.
     }
 
 private:
