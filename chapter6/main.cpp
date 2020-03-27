@@ -575,6 +575,9 @@ private:
     void init_shader_modules_()
     {
         {
+            // 버텍스 셰이더 스테이지에서 사용될 버텍스 셰이더를 정의한다.
+            // gl_VertexIndex는 순차적으로 증가돠며 배열로 정의된 위치 정보를 가져오는데 사용된다.
+            // 위치 정보가 셰이더에 정의되어 있기 때문에 버텍스 버퍼가 필요하지 않는다.
             const string vksl = {
                 "void main() {                                          \n"
                 "    vec2 pos[3] = vec2[3](vec2(-0.5,  0.5),            \n"
@@ -585,14 +588,17 @@ private:
                 "}                                                      \n"
             };
 
+            // SPIR-V 런타임 컴파일러를 이용해 VKSL을 SPIR-V로 컴파일 한다.
             auto spirv = Spirv_compiler().compile(Shader_type::vertex, vksl);
 
+            // 생성하려는 셰이더 모듈을 정의한다.
             VkShaderModuleCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             create_info.codeSize = spirv.size() * sizeof(uint32_t);
             create_info.pCode = &spirv[0];
 
+            // 정의된 셰이더 모듈을 생성한다.
             auto result = vkCreateShaderModule(device_, &create_info, nullptr, &shader_modules_[0]);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -608,6 +614,8 @@ private:
         }
 
         {
+            // 프레그먼 셰이더 스테이지에서 사용될 트프레그먼트 셰이더를 정의한다.
+            // 단순히 초록색을 프레임버퍼게 기록한다.
             const string vksl = {
                 "precision mediump float;                        \n"
                 "                                                \n"
@@ -618,14 +626,17 @@ private:
                 "}                                               \n"
             };
 
+            // SPIR-V 런타임 컴파일러를 이용해 VKSL을 SPIR-V로 컴파일 한다.
             auto spirv = Spirv_compiler().compile(Shader_type::fragment, vksl);
 
+            // 생성하려는 셰이더 모듈을 정의한다.
             VkShaderModuleCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             create_info.codeSize = spirv.size() * sizeof(uint32_t);
             create_info.pCode = &spirv[0];
 
+            // 정의된 셰이더 모듈을 생성한다.
             auto result = vkCreateShaderModule(device_, &create_info, nullptr, &shader_modules_[1]);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -643,10 +654,12 @@ private:
 
     void init_pipeline_layout_()
     {
+        // 어떠한 리소스도 접근하지 않는 파이프라인 레이아웃을 정의한다.
         VkPipelineLayoutCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
+        // 정의된 파이프라인 레이아웃을 생성한다.
         auto result = vkCreatePipelineLayout(device_, &create_info, nullptr, &pipeline_layout_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -663,9 +676,11 @@ private:
 
     void init_pipeline_()
     {
+        // 파이프라인에 사용될 셰이더 스테이지들을 정의한다.
         array<VkPipelineShaderStageCreateInfo, 2> stages;
 
         {
+            // 버텍스 셰이더를 정의한다.
             VkPipelineShaderStageCreateInfo stage {};
 
             stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -677,6 +692,7 @@ private:
         }
 
         {
+            // 프래그먼트 셰이더를 정의한다.
             VkPipelineShaderStageCreateInfo stage {};
 
             stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -687,10 +703,13 @@ private:
             stages[1] = stage;
         }
 
+        // 버텍스 인풋 스테이지를 정의한다.
+        // 버텍스 버퍼가 사용되지 않기 때문에 버텍스 버퍼를 어떻게 읽을지 정의하지 않는다.
         VkPipelineVertexInputStateCreateInfo vertex_input_state {};
 
         vertex_input_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
+        // 파이프라인 인풋 어셈블리 스테이지를 정의한다.
         VkPipelineInputAssemblyStateCreateInfo input_assembly_state {};
 
         input_assembly_state.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -707,6 +726,7 @@ private:
 
         scissor.extent = swapchain_image_extent_;
 
+        // 파이프라인 뷰포트 스테이지를 정의한다.
         VkPipelineViewportStateCreateInfo viewport_state {};
 
         viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -715,6 +735,7 @@ private:
         viewport_state.scissorCount = 1;
         viewport_state.pScissors = &scissor;
 
+        // 파이프라인 레스터라이제이션 스테이지를 정의한다.
         VkPipelineRasterizationStateCreateInfo rasterization_state {};
 
         rasterization_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -722,15 +743,21 @@ private:
         rasterization_state.cullMode = VK_CULL_MODE_NONE;
         rasterization_state.lineWidth = 1.0f;
 
+        // 파이프라인 멀티샘플 스테이지를 정의한다.
+        // MSAA가 사용되지 않더라도 1 샘플에 대해 정의해야한다.
         VkPipelineMultisampleStateCreateInfo multisample_state {};
 
         multisample_state.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisample_state.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
+        // 뎁스 스텐실 스테이지를 정의한다.
+        // 뎁스, 스텐실 테스트를 사용하진 않더라도 사용하지 않는것에 대한 정의가 필요하다.
         VkPipelineDepthStencilStateCreateInfo depth_stencil_state {};
 
         depth_stencil_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 
+        // 파이프라인 컬러 블렌드 어테치먼트에 대해 정의한다.
+        // colorWriteMask가 0이면 프레그먼트의 결과값이 프레임버퍼에 쓰이지 않는다.
         VkPipelineColorBlendAttachmentState attachment {};
 
         attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
@@ -738,12 +765,14 @@ private:
                                   | VK_COLOR_COMPONENT_B_BIT
                                   | VK_COLOR_COMPONENT_A_BIT;
 
+        // 파이프라인 컬러 블렌드 스테이지를 정의한다.
         VkPipelineColorBlendStateCreateInfo color_blend_state {};
 
         color_blend_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         color_blend_state.attachmentCount = 1;
         color_blend_state.pAttachments = &attachment;
 
+        // 생성하려는 그래픽스 파이프라인을 정의한다.
         VkGraphicsPipelineCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -759,6 +788,7 @@ private:
         create_info.layout = pipeline_layout_;
         create_info.renderPass = render_pass_;
 
+        // 정의된 그래픽스 파이프라인을 생성한다.
         auto result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &create_info, nullptr, &pipeline_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -828,17 +858,20 @@ private:
 
     void fini_shader_modules_()
     {
+        // 생성된 셰이더 모듈을 파괴한다.
         for (auto& shader_module : shader_modules_)
             vkDestroyShaderModule(device_, shader_module, nullptr);
     }
 
     void fini_pipeline_layout_()
     {
+        // 생성된 파이프라인 레이아웃을 파괴한다.
         vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
     }
 
     void fini_pipeline_()
     {
+        // 생성된 파이프라인을 파괴한다.
         vkDestroyPipeline(device_, pipeline_, nullptr);
     }
 
@@ -929,7 +962,10 @@ private:
 
         vkCmdBeginRenderPass(command_buffer_, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
+        // 사용하려는 파이프라인을 바인딩한다.
         vkCmdBindPipeline(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+
+        // 드로우 콜을 생성한다.
         vkCmdDraw(command_buffer_, 3, 1, 0, 0);
 
         vkCmdEndRenderPass(command_buffer_);
