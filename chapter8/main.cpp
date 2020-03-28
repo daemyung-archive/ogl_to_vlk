@@ -28,6 +28,7 @@ constexpr auto rendering_done_index {1};
 
 //----------------------------------------------------------------------------------------------------------------------
 
+// 위치와 색상값을 가진 버텍스를 정의한다.
 struct Vertex {
     float x, y;
     float r, g, b;
@@ -321,10 +322,13 @@ private:
 
     uint32_t find_memory_type_index(const VkMemoryRequirements& requirements, VkMemoryPropertyFlags properties)
     {
+        // 메모리 요구사항과 필요한 메모리 성질을 모두 만족하는 메모리 타입 인덱스를 찾는다.
         for (auto i = 0; i != physical_device_memory_properties_.memoryTypeCount; ++i) {
+            // 메모리 요구사항이 특정 메모리 타입 인덱스에서 할당가능한지 검사한다.
             if (!(requirements.memoryTypeBits & (1 << i)))
                 continue;
 
+            // 필요한 메모리 성질을 만족하는지 검사한다.
             if ((physical_device_memory_properties_.memoryTypes[i].propertyFlags & properties) != properties)
                 continue;
 
@@ -336,18 +340,23 @@ private:
 
     void init_vertex_resources_()
     {
+        // 위의 구조체에서 정의한데로 총 3개의 버텍스를 정의한다.
         vector<Vertex> vertices = {
-            {-0.5,  0.5, 1.0, 0.0, 0.0 },
-            { 0.5,  0.5, 0.0, 1.0, 0.0 },
-            { 0.0, -0.5, 0.0, 0.0, 1.0 }
+             /*  위치  */ /*   색상    */
+            {-0.5,  0.5, 1.0, 0.0, 0.0},
+            { 0.5,  0.5, 0.0, 1.0, 0.0},
+            { 0.0, -0.5, 0.0, 0.0, 1.0}
         };
 
+        // 생성하려는 버텍스 버퍼를 정의한다.
         VkBufferCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         create_info.size = sizeof(Vertex) * vertices.size();
+        // 버퍼의 사용처를 VERTEX_BUFFER_BIT을 설정하지 않으면 버텍스 버퍼로 사용할 수 없다.
         create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
+        // 버퍼를 생성한다.
         auto result = vkCreateBuffer(device_, &create_info, nullptr, &vertex_buffer_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -361,15 +370,19 @@ private:
         }
         assert(result == VK_SUCCESS);
 
+        // 버퍼를 사용하기 위한 메모리 요구사항을 쿼리한다.
         VkMemoryRequirements requirements;
         vkGetBufferMemoryRequirements(device_, vertex_buffer_, &requirements);
 
+        // 쿼리된 정보를 바탕으로 할당할 메모리를 정의한다.
         VkMemoryAllocateInfo alloc_info {};
 
         alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         alloc_info.allocationSize = requirements.size;
+        // CPU에서 접근 가능하고 CPU와 GPU의 메모리 데이터가 항상 일치하는 메모리 타입을 선택한다.
         alloc_info.memoryTypeIndex = find_memory_type_index(requirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
+        // 메모리를 할당한다.
         result = vkAllocateMemory(device_, &alloc_info, nullptr, &vertex_device_memory_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -386,6 +399,7 @@ private:
         }
         assert(result == VK_SUCCESS);
 
+        // 생성된 버퍼와 할당된 메모리를 바인딩한다.
         result = vkBindBufferMemory(device_, vertex_buffer_, vertex_device_memory_, 0);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -400,6 +414,7 @@ private:
         assert(result == VK_SUCCESS);
 
         void* contents;
+        // 메모리에 접근가능한 포인터를 가져온다.
         result = vkMapMemory(device_, vertex_device_memory_, 0, sizeof(Vertex) * vertices.size(), 0, &contents);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -416,8 +431,12 @@ private:
         }
         assert(result == VK_SUCCESS);
 
+        // 버텍스 버퍼의 데이터를 메모리에 복사한다.
         memcpy(contents, &vertices[0], sizeof(Vertex) * vertices.size());
 
+        // 메모리의 접근을 끝마친다.
+        // Vulkan의 경우 vkUnmapMemory를 항상 호출하지 않아도 된다.
+        // 처음에 한번만 vkMapMemory를 호출하고 반환된 주소값을 이용해 메모리를 계속 접근할 수 있다.
         vkUnmapMemory(device_, vertex_device_memory_);
     }
 
@@ -485,7 +504,7 @@ private:
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device_, surface_, &surface_capabilities);
 
         VkCompositeAlphaFlagBitsKHR composite_alpha;
-        for (auto i = 1; i != 32; ++i) {
+        for (auto i = 1; i != 32u; ++i) {
             VkCompositeAlphaFlagBitsKHR flag = static_cast<VkCompositeAlphaFlagBitsKHR>(0x1 << i);
             if (surface_capabilities.supportedUsageFlags & flag) {
                 composite_alpha = flag;
@@ -699,6 +718,7 @@ private:
     {
         {
             const string vksl = {
+                // 더이상 셰이더 안에서 정의되어있던 버텍스 정보를 사용하지 않고 버텍스 버퍼로부터 데이터를 읽어온다.
                 "precision mediump float;                 \n"
                 "                                         \n"
                 "layout(location = 0) in vec2 i_pos;      \n"
@@ -817,6 +837,7 @@ private:
             stages[1] = stage;
         }
 
+        // 버텍스 인풋 바인딩을 정의한다.
         VkVertexInputBindingDescription vertex_input_binding {};
 
         vertex_input_binding.binding = 0;
@@ -826,10 +847,11 @@ private:
         vector<VkVertexInputAttributeDescription> vertex_input_attributes;
 
         {
+            // 위치에 대한 버텍스 인풋 어트리뷰트를 정의한다.
             VkVertexInputAttributeDescription vertex_input_attribute {};
 
-            vertex_input_attribute.location = 0;
-            vertex_input_attribute.binding = 0;
+            vertex_input_attribute.location = 0; // 셰이더에서 정의한 로케이션
+            vertex_input_attribute.binding = 0; // 버텍스 버퍼의 바인딩 인덱스
             vertex_input_attribute.format = VK_FORMAT_R32G32_SFLOAT;
             vertex_input_attribute.offset = offsetof(Vertex, x);
 
@@ -837,16 +859,18 @@ private:
         }
 
         {
+            // 색상에 대한 버텍스 인풋 어트리뷰트를 정의한다.
             VkVertexInputAttributeDescription vertex_input_attribute {};
 
-            vertex_input_attribute.location = 1;
-            vertex_input_attribute.binding = 0;
+            vertex_input_attribute.location = 1; // 셰이더에서 정의한 로케이션
+            vertex_input_attribute.binding = 0; // 버텍스 버퍼의 바인딩 인덱스
             vertex_input_attribute.format = VK_FORMAT_R32G32B32_SFLOAT;
             vertex_input_attribute.offset = offsetof(Vertex, r);
 
             vertex_input_attributes.push_back(vertex_input_attribute);
         }
 
+        // 파이프라인 버텍스 인풋 스테이지를 정의한다.
         VkPipelineVertexInputStateCreateInfo vertex_input_state {};
 
         vertex_input_state.vertexBindingDescriptionCount = 1;
@@ -966,7 +990,10 @@ private:
 
     void fini_vertex_resources_()
     {
+        // 할당된 메모리를 해제한다.
         vkFreeMemory(device_, vertex_device_memory_, nullptr);
+
+        // 생성된 버퍼를 파괴한다.
         vkDestroyBuffer(device_, vertex_buffer_, nullptr);
     }
 
@@ -1100,8 +1127,10 @@ private:
 
         vkCmdBeginRenderPass(command_buffer_, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
+        // 사용할 버텍스 버퍼를 바인딩 한다.
         VkDeviceSize vertex_buffer_offset {0};
         vkCmdBindVertexBuffers(command_buffer_, 0, 1, &vertex_buffer_, &vertex_buffer_offset);
+
         vkCmdBindPipeline(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         vkCmdDraw(command_buffer_, 3, 1, 0, 0);
 
