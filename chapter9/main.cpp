@@ -428,18 +428,25 @@ private:
 
     void init_index_resources_()
     {
+        // 인덱스 버퍼 데이터를 정의한다.
         vector<uint16_t> indices {0, 1, 2};
+
+        // 인덱스 버퍼는 버텍스 버퍼를 어떤 순서로 접근할지 정의하기 때문에 인덱스 버퍼의 내용은 변경되는 경우가 매우 드물다.
+        // 그러므로 GPU가 빠르게 접근할 수 있는 메모리 타입에 할당하여 인덱스 버퍼를 접근하는게 좋다.
+        // 하지만 GPU가 빠르게 접근할 수 있는 메모리 타입은 대부분 CPU가 접근할 수 없기 때문에 스테이징 버퍼를 사용하여 CPU에서 GPU로 복사한다.
 
         VkBuffer staging_buffer;
         VkDeviceMemory staging_device_memory;
 
         {
+            // 생성할 스테이징 버퍼를 정의한다.
             VkBufferCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
             create_info.size = sizeof(uint16_t) * indices.size();
             create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
+            // 스테이징 버퍼를 생성한다.
             auto result = vkCreateBuffer(device_, &create_info, nullptr, &staging_buffer);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -453,9 +460,11 @@ private:
             }
             assert(result == VK_SUCCESS);
 
+            // 스테이징 버퍼를 위한 메모리 요구사항을 쿼리한다.
             VkMemoryRequirements requirements;
             vkGetBufferMemoryRequirements(device_, staging_buffer, &requirements);
 
+            // 스테이징 버퍼를 위한 메모리를 정의한다.
             VkMemoryAllocateInfo alloc_info {};
 
             alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -463,6 +472,7 @@ private:
             alloc_info.memoryTypeIndex = find_memory_type_index(requirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
                                                                             | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
+            // 스테이징 메모리를 할당한다.
             result = vkAllocateMemory(device_, &alloc_info, nullptr, &staging_device_memory);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -479,6 +489,7 @@ private:
             }
             assert(result == VK_SUCCESS);
 
+            // 스테이징 버퍼와 스테이징 메모리를 바인딩한다.
             result = vkBindBufferMemory(device_, staging_buffer, staging_device_memory, 0);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -493,6 +504,7 @@ private:
             assert(result == VK_SUCCESS);
 
             void* contents;
+            // 스테이징 메모리의 포인터를 가져온다.
             result = vkMapMemory(device_, staging_device_memory, 0, sizeof(uint16_t) * indices.size(), 0, &contents);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -509,12 +521,15 @@ private:
             }
             assert(result == VK_SUCCESS);
 
+            // 인덱스 버퍼 데이터를 복사한다.
             memcpy(contents, &indices[0], sizeof(uint16_t) * indices.size());
 
+            // 메모리의 접근을 마친다.
             vkUnmapMemory(device_, staging_device_memory);
         }
 
         {
+            // 생성할 인덱스 버퍼를 정의한다.
             VkBufferCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -522,6 +537,7 @@ private:
             create_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT
                                 | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 
+            // 정의한 인덱스 버퍼를 생성한다.
             auto result = vkCreateBuffer(device_, &create_info, nullptr, &index_buffer_);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -535,15 +551,18 @@ private:
             }
             assert(result == VK_SUCCESS);
 
+            // 인덱스 버퍼에 필요한 메모리 요구사항을 쿼리한다.
             VkMemoryRequirements requirements;
             vkGetBufferMemoryRequirements(device_, index_buffer_, &requirements);
 
+            // 인덱스 메모리를 정의한다.
             VkMemoryAllocateInfo alloc_info {};
 
             alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
             alloc_info.allocationSize = requirements.size;
             alloc_info.memoryTypeIndex = find_memory_type_index(requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
+            // 정의된 인덱스 메모리를 할당한다.
             result = vkAllocateMemory(device_, &alloc_info, nullptr, &index_device_memory_);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -560,9 +579,11 @@ private:
             }
             assert(result == VK_SUCCESS);
 
+            // 인덱스 버퍼에 사용하는 메모리는 CPU가 접근할 수 없는 메모리이기 때문에 아래 코드를 실행할 수 없다.
             // void* contents;
             // vkMapMemory(device_, index_device_memory_, 0, VK_WHOLE_SIZE, 0, &contents);
 
+            // 인덱스 버퍼와 인덱스 메모리를 바인딩한다.
             result = vkBindBufferMemory(device_, index_buffer_, index_device_memory_, 0);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -577,6 +598,7 @@ private:
             assert(result == VK_SUCCESS);
         }
 
+        // 스테이징 버퍼를 인덱스 버퍼로 복사하기 위한 커맨드 버퍼를 정의한다.
         VkCommandBufferAllocateInfo allocate_info {};
 
         allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -584,34 +606,49 @@ private:
         allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocate_info.commandBufferCount = 1;
 
+        // 커맨드 버퍼를 할당한다.
         VkCommandBuffer command_buffer;
         vkAllocateCommandBuffers(device_, &allocate_info, &command_buffer);
 
+        // 커맨더 버퍼의 리코딩을 어떻게 할지 정의한다.
         VkCommandBufferBeginInfo begin_info {};
 
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+        // 커맨드 버퍼의 리코딩을 시작한다.
         vkBeginCommandBuffer(command_buffer, &begin_info);
 
+        // 스테이징 버퍼에서 인덱스 버퍼로 복사할 영역을 정의한다.
         VkBufferCopy region {};
 
         region.size = sizeof(uint16_t) * indices.size();
 
+        // 스테이징 버퍼를 인덱스 버퍼로 복사한다.
         vkCmdCopyBuffer(command_buffer, staging_buffer, index_buffer_, 1, &region);
 
+        // 커맨드 버퍼의 리코딩을 종료한다.
         vkEndCommandBuffer(command_buffer);
 
+        // 커맨드 버퍼를 큐에 어떻게 제출할지 정의한다.
         VkSubmitInfo submit_info {};
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer;
 
+        // 커맨드 버퍼를 큐에 제출한다.
         vkQueueSubmit(queue_, 1, &submit_info, VK_NULL_HANDLE);
+
+        // 제출된 커맨드 버퍼가 다 처리될 때까지 기다린다.
+        // vkDeviceWaitIdle은 가능한 호출하지 않는것이 좋다.
+        // 지금과 같이 스테이징 버퍼를 복사하는 경우 스테이징 버퍼를 바로 파괴하지 말고 펜스를 이용하여
+        // 해당 커맨드 버퍼가 처리됬는지 확인한 후 스테이징 버퍼와 스테이징 메모리를 해제하면 된다.
         vkDeviceWaitIdle(device_);
 
+        // 스테이징 메모리를 해제한다.
         vkFreeMemory(device_, staging_device_memory, nullptr);
+        // 스테이징 버퍼를 해제한다.
         vkDestroyBuffer(device_, staging_buffer, nullptr);
     }
 
@@ -1166,7 +1203,9 @@ private:
 
     void fini_index_resources_()
     {
+        // 인덱스 메모리를 해제한다.
         vkFreeMemory(device_, index_device_memory_, nullptr);
+        // 인덱스 버퍼를 해제한다.
         vkDestroyBuffer(device_, index_buffer_, nullptr);
     }
 
@@ -1302,8 +1341,13 @@ private:
 
         VkDeviceSize vertex_buffer_offset {0};
         vkCmdBindVertexBuffers(command_buffer_, 0, 1, &vertex_buffer_, &vertex_buffer_offset);
+
+        // 인덱스 버퍼를 바인딩 한다.
         vkCmdBindIndexBuffer(command_buffer_, index_buffer_, 0, VK_INDEX_TYPE_UINT16);
+
         vkCmdBindPipeline(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+
+        // 인덱스 버퍼를 이용하여 드로우 콜을 기록한다.
         vkCmdDrawIndexed(command_buffer_, 3, 1, 0, 0, 0);
 
         vkCmdEndRenderPass(command_buffer_);
