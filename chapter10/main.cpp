@@ -35,6 +35,7 @@ struct Vertex {
 
 //----------------------------------------------------------------------------------------------------------------------
 
+// 색상 정보를 가진 유니폼 버퍼를 정의한다.
 struct Material {
     float r, g, b;
 };
@@ -627,12 +628,14 @@ private:
 
     void init_uniform_resources_()
     {
+        // 생성할 유니폼 버퍼를 정의한다.
         VkBufferCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         create_info.size = sizeof(Material);
         create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
+        // 정의한 유니폼 버퍼를 생성한다.
         auto result = vkCreateBuffer(device_, &create_info, nullptr, &uniform_buffer_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -646,9 +649,12 @@ private:
         }
         assert(result == VK_SUCCESS);
 
+        // 유니폼 버퍼를 할당하기 위한 메모리 요구사항을 쿼리한다.
         VkMemoryRequirements requirements;
         vkGetBufferMemoryRequirements(device_, vertex_buffer_, &requirements);
 
+        // 할당할 유니폼 메모리를 정의한다.
+        // 유니폼 버퍼는 CPU에서 자주 접근하기 때문에 CPU가 접근 가능한 메모리 타입에 할당한다.
         VkMemoryAllocateInfo alloc_info {};
 
         alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -656,6 +662,7 @@ private:
         alloc_info.memoryTypeIndex = find_memory_type_index(requirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
                                                                           | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
+        // 메모리를 할당받는다.
         result = vkAllocateMemory(device_, &alloc_info, nullptr, &uniform_device_memory_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -672,6 +679,7 @@ private:
         }
         assert(result == VK_SUCCESS);
 
+        // 유니폼 버퍼와 유니폼 메모리를 바인딩한다.
         result = vkBindBufferMemory(device_, uniform_buffer_, uniform_device_memory_, 0);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -1001,6 +1009,7 @@ private:
         }
 
         {
+            // 유니폼 버퍼를 정의하며 데이터는 유니폼 버퍼와 연결된 디스크립터 셋을 통해 읽는다.
             const string vksl = {
                 "precision mediump float;                               \n"
                 "                                                       \n"
@@ -1042,19 +1051,22 @@ private:
 
     void init_descriptor_set_layouts_()
     {
+        // 유니폼 버퍼 디스크립터 셋 레이아웃 바인딩을 정의한다.
         VkDescriptorSetLayoutBinding binding {};
 
         binding.binding = 0;
         binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         binding.descriptorCount = 1;
-        binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT; // 프레그먼트 셰이더에서만 읽힌다.
 
+        // 유니폼 버퍼 바인딩이 정의된 디스크립터 셋 레이아웃을 정의한다.
         VkDescriptorSetLayoutCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         create_info.bindingCount = 1;
         create_info.pBindings = &binding;
 
+        // 정의된 디스크립터 셋 레이아웃을 생성한다.
         auto result = vkCreateDescriptorSetLayout(device_, &create_info, nullptr, &material_descriptor_set_layout_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -1071,12 +1083,14 @@ private:
 
     void init_pipeline_layout_()
     {
+        // 유니폼 버퍼가 프레그먼트 셰이더에서 읽히기 때문에 유니폼 버퍼를 읽을 수 있는 파이프라인 레이아웃을 정의한다.
         VkPipelineLayoutCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         create_info.setLayoutCount = 1;
         create_info.pSetLayouts = &material_descriptor_set_layout_;
 
+        // 정의한 파이프라인 레이아웃을 생성한다.
         auto result = vkCreatePipelineLayout(device_, &create_info, nullptr, &pipeline_layout_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -1240,8 +1254,16 @@ private:
 
     void init_descriptor_pool_()
     {
+        // 셰이더에서 자원을 읽기 위해선 디스크립터 셋이 필요하다.
+        // 디스크립터 셋은 디스크립터 풀을 통해 할당받을 수 있다.
+
+        // 디스크립터 풀의 크기를 정의한다. 지금은 유니폼 버퍼 한개만 필요하기 때문에 아래와 같이 정의한다.
         VkDescriptorPoolSize pool_size {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1};
 
+        // 생성할 디스크립터 풀을 정의한다.
+        // 주의해야할 점은 maxSets은 할당할 수 있는 디스크립터 셋의 개수이며 디스크립터 풀 크기와 다르다.
+        // 예를 들어 maxSets이 1000개이나 디스크립터 풀 크기가 위와 같다면 한개의 디스크립터 셋만 할당받을 수 있다.
+        // 왜냐하면 이미 할당할 수 있는 바인딩 자원이 없기 때문이다. 그러므로 잘 계산하여 적절한 maxSet과 디스크립터 풀 크기를 정해야한다.
         VkDescriptorPoolCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1249,6 +1271,7 @@ private:
         create_info.poolSizeCount = 1;
         create_info.pPoolSizes = &pool_size;
 
+        // 정의한 디스크립터 풀을 생성한다.
         auto result = vkCreateDescriptorPool(device_, &create_info, nullptr, &descriptor_pool_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -1265,6 +1288,7 @@ private:
 
     void init_descriptor_sets_()
     {
+        // 할당하려는 디스크립터 셋을 정의한다.
         VkDescriptorSetAllocateInfo allocate_info {};
 
         allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1272,6 +1296,7 @@ private:
         allocate_info.descriptorSetCount = 1;
         allocate_info.pSetLayouts = &material_descriptor_set_layout_;
 
+        // 정의된 디스크립터 셋을 할당받는다.
         auto result = vkAllocateDescriptorSets(device_, &allocate_info, &material_descriptor_set_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -1329,7 +1354,9 @@ private:
 
     void fini_uniform_resources_()
     {
+        // 할당된 유니폼 메모리를 해제한다.
         vkFreeMemory(device_, uniform_device_memory_, nullptr);
+        // 생성된 유니폼 버퍼를 파괴한다.
         vkDestroyBuffer(device_, uniform_buffer_, nullptr);
     }
 
@@ -1368,6 +1395,7 @@ private:
 
     void fini_descriptor_set_layouts_()
     {
+        // 생성된 디스크립터 셋 레이아웃을 파괴한다.
         vkDestroyDescriptorSetLayout(device_, material_descriptor_set_layout_, nullptr);
     }
 
@@ -1383,6 +1411,7 @@ private:
 
     void fini_descriptor_pool_()
     {
+        // 생성된 디스크립터 풀을 파괴한다. 동시에 할당된 디스크립터 셋도 모두 파괴된다.
         vkDestroyDescriptorPool(device_, descriptor_pool_, nullptr);
     }
 
@@ -1430,12 +1459,14 @@ private:
 
         vkResetFences(device_, 1, &fence_);
 
+        // 디스크립터 셋에 연결할 유니폼 버퍼를 정의한다.
         VkDescriptorBufferInfo buffer_info {};
 
         buffer_info.buffer = uniform_buffer_;
         buffer_info.offset = 0;
         buffer_info.range = sizeof(Material);
 
+        // 디스크립터 셋을 어떻게 업데이트할것인지 정의한다.
         VkWriteDescriptorSet descriptor_write {};
 
         descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1445,14 +1476,23 @@ private:
         descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptor_write.pBufferInfo = &buffer_info;
 
+        // 디스크립터 셋을 업데이트 한다. 업데이트된 디스크립터를 통해 파이프라인이 필요한 자원에 접근할 수 있다.
         vkUpdateDescriptorSets(device_, 1, &descriptor_write, 0, nullptr);
 
+        // 이 예제에선 디스크립터 셋에 동일한 유니폼 버퍼가 연결되기 때문에 매번 업데이트가 필요하지 않는다.
+        // 한번만 업데이트해도 되나 파이프라인과 리소스의 바인딩을 보다 쉽게 이해하기 위해 매번 업데이트 한다.
+
         void* contents;
+        // 유니폼 버퍼를 업데이트하기 위해 유니폼 메모리에 접근을 시작한다.
         vkMapMemory(device_, uniform_device_memory_, 0, sizeof(Material), 0, &contents);
 
         auto material = static_cast<Material*>(contents);
 
+        // 적절한 색상으로 업데이트 한다.
         static auto t = 0.0f;
+
+        // 시간축에 따라 코사인 값이 계산된다. 색상은 [0, 1]로 표현되나 코사인은 [-1, 1]의 값을 가지고 있으므로
+        // 아래 수식을 통해 [-1, 1]을 [0, 1]로 변경해준다.
         float value = (cos(t) + 1.0f) / 2.0f;
 
         t += 0.05f;
@@ -1461,6 +1501,7 @@ private:
         material->g = value;
         material->b = value;
 
+        // 유니폼 메모리의 접근을 마친다.
         vkUnmapMemory(device_, uniform_device_memory_);
 
         vkResetCommandBuffer(command_buffer_, 0);
@@ -1515,7 +1556,12 @@ private:
         VkDeviceSize vertex_buffer_offset {0};
         vkCmdBindVertexBuffers(command_buffer_, 0, 1, &vertex_buffer_, &vertex_buffer_offset);
         vkCmdBindIndexBuffer(command_buffer_, index_buffer_, 0, VK_INDEX_TYPE_UINT16);
-        vkCmdBindDescriptorSets(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout_, 0, 1, &material_descriptor_set_, 0, nullptr);
+
+        // 파이프라인에서 필요한 리소스가 연결되어있는 디스크립터 셋을 바인딩한다.
+        vkCmdBindDescriptorSets(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                pipeline_layout_, 0, 1, &material_descriptor_set_,
+                                0, nullptr);
+
         vkCmdBindPipeline(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         vkCmdDrawIndexed(command_buffer_, 3, 1, 0, 0, 0);
 
