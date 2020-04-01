@@ -31,6 +31,7 @@ constexpr auto rendering_done_index {1};
 
 //----------------------------------------------------------------------------------------------------------------------
 
+// Vertex에 텍스쳐 좌표계를 추가로 정의한다.
 struct Vertex {
     float x, y;
     float r, g, b;
@@ -366,6 +367,7 @@ private:
 
     void init_vertex_resources_()
     {
+        // 텍스쳐 좌표계 데이터를 정의한다.
         vector<Vertex> vertices = {
             {-0.5,  0.5, 1.0, 0.3, 0.3, 0.0, 1.0},
             { 0.5,  0.5, 0.3, 1.0, 0.3, 1.0, 1.0},
@@ -716,18 +718,24 @@ private:
         auto path = find_asset_path() / "logo.png";
 
         int w, h, c;
+        // 이미지 파일을 읽는다.
         auto data = stbi_load(path.c_str(), &w, &h, &c, STBI_rgb_alpha);
+
+        // 이미지는 파일로부터 한번 읽고 특수한 경우를 제외하곤 변경되지 않는다.
+        // 그러므로 GPU의 접근이 용이한 메모리를 할당한다.
 
         VkBuffer staging_buffer;
         VkDeviceMemory staging_device_memory;
 
         {
+            // 스테이징 버퍼를 정의한다.
             VkBufferCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
             create_info.size = w * h * STBI_rgb_alpha;
             create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
+            // 정의한 스테이징 버퍼를 생성한다.
             auto result = vkCreateBuffer(device_, &create_info, nullptr, &staging_buffer);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -741,9 +749,11 @@ private:
             }
             assert(result == VK_SUCCESS);
 
+            // 스테이징 버퍼를 위해 필요한 메모리 공간을 쿼리한다.
             VkMemoryRequirements requirements;
             vkGetBufferMemoryRequirements(device_, staging_buffer, &requirements);
 
+            // 스테이징 메모리를 정의한다.
             VkMemoryAllocateInfo alloc_info {};
 
             alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -751,6 +761,7 @@ private:
             alloc_info.memoryTypeIndex = find_memory_type_index(requirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
                                                                               | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
+            // 스테이징 메모리를 할당한다.
             result = vkAllocateMemory(device_, &alloc_info, nullptr, &staging_device_memory);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -767,6 +778,7 @@ private:
             }
             assert(result == VK_SUCCESS);
 
+            // 스테이징 버퍼와 스테이징 메모리를 바인딩한다.
             result = vkBindBufferMemory(device_, staging_buffer, staging_device_memory, 0);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -781,6 +793,7 @@ private:
             assert(result == VK_SUCCESS);
 
             void* contents;
+            // 스테이징 메모리에 접근가능한 포인터를 쿼리한다.
             result = vkMapMemory(device_, staging_device_memory, 0, w * h * STBI_rgb_alpha, 0, &contents);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -797,14 +810,18 @@ private:
             }
             assert(result == VK_SUCCESS);
 
+            // 이미지 데이터를 스테이징 버퍼로 복사한다.
             memcpy(contents, data, w * h * STBI_rgb_alpha);
 
+            // 스테이징 버퍼에 접근을 마친다.
             vkUnmapMemory(device_, staging_device_memory);
         }
 
+        // 이미지를 읽기 위한 메모리를 해제한다.
         stbi_image_free(data);
 
         {
+            // 생성하려는 이미지를 정의한다.
             VkImageCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -814,22 +831,31 @@ private:
             create_info.mipLevels = 1;
             create_info.arrayLayers = 1;
             create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+
+            // 이미지를 보다 효율적으로 읽기 위해 TILING_OPTIMAL을 사용한다.
+            // 미디어 이미지를 다루는 경우는 출력을 위해 TILING_OPTIMAL에서 LINEAR로 변경되어야 하기 때문에
+            // TILING_OPTIMAL이 적합하지 않을 수 있다. 그러므로 여러 가정을 고려하여 선택해야한다.
             create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-            create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+            create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT; // 셰이더에서 읽기 위하 SAMPLED를 추가한다.
             create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
             create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
+            // 정의된 이미지를 생성한다.
             auto result = vkCreateImage(device_, &create_info, nullptr, &texture_image_);
 
+            // 이미지에 필요한 메모리 요구사항을 쿼리한다.
             VkMemoryRequirements requirements;
             vkGetImageMemoryRequirements(device_, texture_image_, &requirements);
 
+            // 할당하려는 메모리를 정의한다.
             VkMemoryAllocateInfo alloc_info {};
 
             alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
             alloc_info.allocationSize = requirements.size;
             alloc_info.memoryTypeIndex = find_memory_type_index(requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
+            // 정의한 메모리를 할당한다.
             result = vkAllocateMemory(device_, &alloc_info, nullptr, &texture_device_memory_);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -846,6 +872,7 @@ private:
             }
             assert(result == VK_SUCCESS);
 
+            // 이미지와 메모리를 바인딩 한다.
             result = vkBindImageMemory(device_, texture_image_, texture_device_memory_, 0);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -859,6 +886,9 @@ private:
             }
             assert(result == VK_SUCCESS);
         }
+
+        // 비록 이미지를 생성했지만 이미지 데이터는 스테이징 버퍼에 담겨있다.
+        // 그러므로 스테이징 버퍼의 내용을 이미지로 복사해주는 작업을 해야한다.
 
         {
             VkCommandBufferAllocateInfo allocate_info {};
@@ -899,13 +929,16 @@ private:
                                      1, &barrier);
             }
 
+            // 복사할 버퍼의 영역과 복사될 이미지의 영역을 정의한다.
             VkBufferImageCopy region {};
 
+            // 버퍼 영역을 정의하지 않을 경우 이미지와 정확히 동일한 크기로 간주한다.
             region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             region.imageSubresource.mipLevel = 0;
             region.imageSubresource.layerCount = 1;
             region.imageExtent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1};
 
+            // 버퍼를 이미지로 복사한다.
             vkCmdCopyBufferToImage(command_buffer,
                                    staging_buffer,
                                    texture_image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -943,9 +976,17 @@ private:
             vkQueueSubmit(queue_, 1, &submit_info, VK_NULL_HANDLE);
             vkDeviceWaitIdle(device_);
             vkFreeCommandBuffers(device_, command_pool_, 1, &command_buffer);
+
+            // 제출한 커맨드버퍼가 처리된 이후에 관련된 리소스들을 해제할 수 있다.
+            vkFreeMemory(device_, staging_device_memory, nullptr);
+            vkDestroyBuffer(device_, staging_buffer, nullptr);
         }
 
         {
+            // 파이프라인에서 이미지를 접근하기 위해선 반드시 이미지 뷰가 필요하다.
+            // 이미지 뷰는 이미지를 접근하기 위한 또 다른 메타데이터라고 생각하면 이해하기 쉽다.
+
+            // 생성하려는 이미지 뷰를 정의한다.
             VkImageViewCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -956,6 +997,7 @@ private:
             create_info.subresourceRange.levelCount = 1;
             create_info.subresourceRange.layerCount = 1;
 
+            // 정의한 이미지 뷰를 생성한다.
             auto result = vkCreateImageView(device_, &create_info, nullptr, &texture_image_view_);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -970,7 +1012,11 @@ private:
             assert(result == VK_SUCCESS);
         }
 
+        // 셰이더에서 texture(...) 함수를 사용하여 특정 위치의 이미지 데이터를 가져온다.
+        // 이를 위해선 반드시 샘플러란 하드웨어가 필요하다. 즉 이미지의 데이터는 샘플러를 통해 이미지의 데이터를 가져오는것이다.
+
         {
+            // 생성하려는 샘플러를 정의한다.
             VkSamplerCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -979,6 +1025,7 @@ private:
             create_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
             create_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 
+            // 정의한 샘플러를 생성한다.
             auto result = vkCreateSampler(device_, &create_info, nullptr, &texture_sampler_);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -1274,6 +1321,7 @@ private:
     void init_shader_modules_()
     {
         {
+            // 텍스쳐 좌표계를 넘겨주기 위한 in, out이 추가되었다.
             const string vksl = {
                 "precision mediump float;                 \n"
                 "                                         \n"
@@ -1315,6 +1363,7 @@ private:
         }
 
         {
+            // 텍스쳐를 접근하기 위한 유니폼이 추가되었고 샘플러를 이용하여 텍스쳐를 읽는다.
             const string vksl = {
                 "precision mediump float;                            \n"
                 "                                                    \n"
@@ -1392,6 +1441,7 @@ private:
         }
 
         {
+            // 텍스쳐를 위한 디스크립터 셋 바인딩을 정의한다.
             VkDescriptorSetLayoutBinding binding {};
 
             binding.binding = 0;
@@ -1399,12 +1449,14 @@ private:
             binding.descriptorCount = 1;
             binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+            // 덱스쳐 디스크립터 셋 바인딩이 포함된 디스크립터 셋 레이아웃을 정의한다.
             VkDescriptorSetLayoutCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
             create_info.bindingCount = 1;
             create_info.pBindings = &binding;
 
+            // 정의한 디스크립터 셋 레이아웃을 생성한다.
             auto result = vkCreateDescriptorSetLayout(device_, &create_info, nullptr, &texture_descriptor_set_layout_);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -1422,6 +1474,7 @@ private:
 
     void init_pipeline_layout_()
     {
+        // 파이프라인의 2개의 디스크립터 셋이 정의되어있기 때문에 반드시 2개의 디스크립터 셋이 필요하다.
         vector<VkDescriptorSetLayout> set_layouts {
             material_descriptor_set_layout_,
             texture_descriptor_set_layout_
@@ -1504,6 +1557,7 @@ private:
         }
 
         {
+            // 텍스쳐 좌표계를 위한 버텍스 인풋 어트리뷰트를 정의한다.
             VkVertexInputAttributeDescription vertex_input_attribute {};
 
             vertex_input_attribute.location = 2;
@@ -1607,8 +1661,11 @@ private:
 
     void init_descriptor_pool_()
     {
+        // 텍스쳐를 위한 디스크립터 셋을 할당하기 위해 디스크립터 풀 크기를 변경한다.
         vector<VkDescriptorPoolSize> pool_size {
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+
+            // COMBINED_IMAGE_SAMPLER는 텍스쳐와 동일한 개념이다.
             {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}
         };
 
@@ -1661,6 +1718,7 @@ private:
         }
 
         {
+            // 텍스쳐를 위한 디스크립터 셋을 정의한다.
             VkDescriptorSetAllocateInfo allocate_info {};
 
             allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1668,6 +1726,7 @@ private:
             allocate_info.descriptorSetCount = 1;
             allocate_info.pSetLayouts = &texture_descriptor_set_layout_;
 
+            // 정의한 디스크립터 셋을 할당한다.
             auto result = vkAllocateDescriptorSets(device_, &allocate_info, &texture_descriptor_set_);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -1732,9 +1791,13 @@ private:
 
     void fini_texture_resources_()
     {
+        // 생성된 텍스쳐 샘플러를 파괴한다.
         vkDestroySampler(device_, texture_sampler_, nullptr);
+        // 생성된 텍스쳐 이미지 뷰를 파괴한다.
         vkDestroyImageView(device_, texture_image_view_, nullptr);
+        // 생성된 텍스쳐 메모리를 파괴한다.
         vkFreeMemory(device_, texture_device_memory_, nullptr);
+        // 생성된 텍스쳐 이미지를 파괴한다.
         vkDestroyImage(device_, texture_image_, nullptr);
     }
 
@@ -1942,7 +2005,13 @@ private:
         vkCmdBindVertexBuffers(command_buffer_, 0, 1, &vertex_buffer_, &vertex_buffer_offset);
         vkCmdBindIndexBuffer(command_buffer_, index_buffer_, 0, VK_INDEX_TYPE_UINT16);
         vkCmdBindDescriptorSets(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout_, 0, 1, &material_descriptor_set_, 0, nullptr);
+
+        // 텍스쳐 디스크립터 셋을 바인딩 한다.
         vkCmdBindDescriptorSets(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout_, 1, 1, &texture_descriptor_set_, 0, nullptr);
+
+        // 메터리얼과 텍스쳐를 위한 디스크립터 셋 바인딩을 한번의 호출로 수행할 수 있다.
+        // 하지만 이해도오 가독성을 높히기 위해 따로따로 호출하였다.
+
         vkCmdBindPipeline(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         vkCmdDrawIndexed(command_buffer_, 3, 1, 0, 0, 0);
 
