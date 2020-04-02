@@ -26,10 +26,6 @@ using namespace Sc_lib;
 
 //----------------------------------------------------------------------------------------------------------------------
 
-namespace fs = filesystem;
-
-//----------------------------------------------------------------------------------------------------------------------
-
 constexpr auto swapchain_image_count {2};
 constexpr auto image_available_index {0};
 constexpr auto rendering_done_index {1};
@@ -296,7 +292,7 @@ private:
         allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocate_info.commandPool = command_pool_;
         allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocate_info.commandBufferCount = swapchain_image_count;
+        allocate_info.commandBufferCount = swapchain_image_count; // 버퍼링을 위해 스왑체인 이미지의 개수만큼 커맨드 버퍼를 생성한다.
 
         auto result = vkAllocateCommandBuffers(device_, &allocate_info, &command_buffers_[0]);
         switch (result) {
@@ -318,6 +314,7 @@ private:
 
         create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
+        // 버퍼링을 위해 각 프레임마다 사용될 세마포어를 생성한다.
         for (auto& semaphores : semaphores_) {
             for (auto& semaphore : semaphores) {
                 auto result = vkCreateSemaphore(device_, &create_info, nullptr, &semaphore);
@@ -343,6 +340,7 @@ private:
         create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
+        // 버퍼링을 위해 각 프레임마다 사용될 펜스를 생성한다.
         for (auto& fence : fences_) {
             auto result = vkCreateFence(device_, &create_info, nullptr, &fence);
             switch (result) {
@@ -649,6 +647,14 @@ private:
 
     void init_uniform_resources_()
     {
+        // 데이터가 변경되지 않는 버텍스 버퍼, 인덱스 버퍼와는 달리 유니폼 버퍼의 내용은 매 프레임마다 변경된다.
+        // 각 프레임마다 유니폼 버퍼를 생성하지 않으면 렌더링 문제가 발생할 수 있다.
+        // 왜냐하면 큐에 커맨드 버퍼를 제출한것은 처리를 요청했을뿐 언제 처리되는지 알 수 없다.
+        // 그러므로 다음 프레임을 위한 데이터를 유니폼 버퍼에 업데이트 하고 나서 이전 프레임을 위한 커맨드 버퍼가 처리될 수 있다.
+        // 이 경우 이전 프레임의 유니폼 데이터가 아닌 다음 프레임의 유니폼 데이터를 사용하게 된다.
+        // 이런 개념은 유니폼 버퍼만 한정되는것이 아니라 매 프레임마다 데이터가 변경되는 모든 경우에 해당된다.
+
+        // 버퍼링을 위해 각 프레임마다 사용될 유니폼 버퍼를 생성한다.
         for (auto i = 0; i != swapchain_image_count; ++i) {
             VkBufferCreateInfo create_info {};
 
@@ -1632,11 +1638,13 @@ private:
 
     void init_descriptor_pool_()
     {
+        // 각 프레임에 해당하는 디스크립터 셋을 할당하기 위해 데스크립터 풀 크기를 변경한다.
         vector<VkDescriptorPoolSize> pool_size {
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2},
             {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}
         };
 
+        // 각 프레임에 해당하는 디스크립터 셋을 할당할 수 있는 디스크립터 풀을 정의한다.
         VkDescriptorPoolCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1660,6 +1668,7 @@ private:
 
     void init_descriptor_sets_()
     {
+        // 각 프레임에 해당하는 디스크립터 셋을 할당받는다.
         for (auto i = 0; i != swapchain_image_count; ++i) {
             {
                 VkDescriptorSetAllocateInfo allocate_info {};
@@ -1858,6 +1867,7 @@ private:
 
     void on_render()
     {
+        // 현재 프레임에 해당하는 세마포어를 사용한다.
         auto& semaphores = semaphores_[frame_index_];
 
         uint32_t swapchain_index;
@@ -1865,6 +1875,7 @@ private:
                               semaphores[image_available_index], VK_NULL_HANDLE,
                               &swapchain_index);
 
+        // 현재 프레임에 해당하는 펜스를 사용한다.
         auto& fence = fences_[frame_index_];
 
         if (VK_NOT_READY == vkGetFenceStatus(device_, fence))
@@ -1873,6 +1884,7 @@ private:
         vkResetFences(device_, 1, &fence);
 
         {
+            // 현재 프레임에 해당하는 유니폼 버퍼와 메터리얼 디스크립터 셋을 사용한다.
             auto& uniform_buffer = uniform_buffers_[frame_index_];
             auto& material_descriptor_set = material_descriptor_sets_[frame_index_];
 
@@ -1895,6 +1907,7 @@ private:
         }
 
         {
+            // 현재 프레임에 해당하는 텍스쳐 디스크립터 셋을 사용한다.
             auto& texture_descriptor_set = texture_descriptor_sets_[frame_index_];
 
             VkDescriptorImageInfo image_info {};
@@ -1915,6 +1928,7 @@ private:
             vkUpdateDescriptorSets(device_, 1, &descriptor_write, 0, nullptr);
         }
 
+        // 현재 프레임에 해당하는 유니폼 메모리를 사용한다.
         auto& uniform_device_memory = uniform_device_memories_[frame_index_];
 
         void* contents;
@@ -1985,6 +1999,8 @@ private:
         vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
         VkDeviceSize vertex_buffer_offset {0};
+
+        // 현재 프레임에 해당하는 디스크립터 셋을 사용한다.
         auto& material_descriptor_set = material_descriptor_sets_[frame_index_];
         auto& texture_descriptor_set = texture_descriptor_sets_[frame_index_];
 
@@ -2046,6 +2062,7 @@ private:
 
         vkQueuePresentKHR(queue_, &present_info);
 
+        // 다음 프레임에 해당하는 리소스를 참조하기 위해 프레임 인덱스를 1만큼 증가시킨다.
         frame_index_ = ++frame_index_ % swapchain_image_count;
     }
 
