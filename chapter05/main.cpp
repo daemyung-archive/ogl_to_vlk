@@ -12,7 +12,6 @@
 
 #include <iostream>
 #include <vector>
-#include <array>
 #include <vulkan/vulkan.h>
 #include <platform/Window.h>
 
@@ -21,14 +20,9 @@ using namespace Platform_lib;
 
 //----------------------------------------------------------------------------------------------------------------------
 
-constexpr auto image_available_index {0};
-constexpr auto rendering_done_index {1};
-
-//----------------------------------------------------------------------------------------------------------------------
-
-class Chapter4 {
+class Chapter3 {
 public:
-    Chapter4(Window* window) :
+    Chapter3(Window* window) :
         window_ {window},
         instance_ {VK_NULL_HANDLE},
         physical_device_ {VK_NULL_HANDLE},
@@ -37,8 +31,6 @@ public:
         queue_ {VK_NULL_HANDLE},
         command_pool_ {VK_NULL_HANDLE},
         command_buffer_ {VK_NULL_HANDLE},
-        semaphores_ {},
-        fences_ {},
         surface_ {VK_NULL_HANDLE},
         swapchain_ {VK_NULL_HANDLE}
     {
@@ -50,14 +42,10 @@ public:
         init_queue_();
         init_command_pool_();
         init_command_buffer_();
-        init_semaphores_();
-        init_fences_();
     }
 
-    ~Chapter4()
+    ~Chapter3()
     {
-        fini_fences_();
-        fini_semaphores_();
         fini_command_pool_();
         fini_device_();
         fini_instance_();
@@ -66,9 +54,9 @@ public:
 private:
     void init_signals_()
     {
-        window_->startup_signal.connect(this, &Chapter4::on_startup);
-        window_->shutdown_signal.connect(this, &Chapter4::on_shutdown);
-        window_->render_signal.connect(this, &Chapter4::on_render);
+        window_->startup_signal.connect(this, &Chapter3::on_startup);
+        window_->shutdown_signal.connect(this, &Chapter3::on_shutdown);
+        window_->render_signal.connect(this, &Chapter3::on_render);
     }
 
     void init_instance_()
@@ -124,6 +112,8 @@ private:
         for (auto &physical_device : physical_devices) {
             VkPhysicalDeviceProperties properties;
             vkGetPhysicalDeviceProperties(physical_device, &properties);
+
+            cout << "Device Name : " << properties.deviceName << '\n' << endl;
         }
 
         physical_device_ = physical_devices[0];
@@ -161,7 +151,7 @@ private:
         queue_create_info.pQueuePriorities = &priority;
 
         vector<const char*> extension_names {
-                "VK_KHR_swapchain",
+            "VK_KHR_swapchain",
         };
 
         VkDeviceCreateInfo create_info {};
@@ -208,12 +198,14 @@ private:
 
     void init_command_pool_()
     {
+        // 생성할 커맨드 풀을 정의한다.
         VkCommandPoolCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         create_info.queueFamilyIndex = queue_family_index_;
 
+        // 커맨드 풀을 생성한다.
         auto result = vkCreateCommandPool(device_, &create_info, nullptr, &command_pool_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -230,6 +222,7 @@ private:
 
     void init_command_buffer_()
     {
+        // 생성할 커맨드 버퍼를 정의한다.
         VkCommandBufferAllocateInfo allocate_info {};
 
         allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -237,6 +230,7 @@ private:
         allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocate_info.commandBufferCount = 1;
 
+        // 커맨드 버퍼를 생성한다.
         auto result = vkAllocateCommandBuffers(device_, &allocate_info, &command_buffer_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -249,60 +243,6 @@ private:
                 break;
         }
         assert(result == VK_SUCCESS);
-    }
-
-    void init_semaphores_()
-    {
-        // 생성할 세마포어를 정의한다.
-        VkSemaphoreCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        // 2개의 세마포어를 생성한다. 세마포어는 GPU와 GPU의 동기화를 위해 사용된다.
-        // 첫번째 세마포어는 프레젠트 엔진으로 부터 이미지가 사용가능한 타이밍을 알기 위해 사용된다. 세마포어가 시그널 된 후 렌더링을 시작할 수 있다.
-        // 두번째 세마포어는 큐에 제출된 커맨드 버퍼가 모두 처리된 타이밍을 알기 위해 사용된다. 세마포어가 시그널 된 후 화면에 출력할 수 있다.
-        for (auto& semaphore : semaphores_) {
-            auto result = vkCreateSemaphore(device_, &create_info, nullptr, &semaphore);
-            switch (result) {
-                case VK_ERROR_OUT_OF_HOST_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                    break;
-                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                    break;
-                default:
-                    break;
-            }
-            assert(result == VK_SUCCESS);
-        }
-    }
-
-    void init_fences_()
-    {
-        // 생성할 펜스를 정의한다.
-        VkFenceCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-
-        // 2개의 펜스를 생성한다. 펜스는 GPU와 CPU의 동기화를 위해 사용된다.
-        // 첫번째 펜스 프레젠트 엔진으로 부터 이미지가 사용가능한 타이밍을 알기 위해 사용된다. 펜스가 시그널 된 후 렌더링을 시작할 수 있다.
-        // 두번째 펜스는 큐에 제출된 커맨드 버퍼가 모두 처리된 타이밍을 알기 위해 사용된다. 펜스가 시그널 된 후 화면에 출력할 수 있다.
-        for (auto i = 0; i != 2; ++i) {
-            create_info.flags = (i == rendering_done_index) ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
-
-            auto result = vkCreateFence(device_, &create_info, nullptr, &fences_[i]);
-            switch (result) {
-                case VK_ERROR_OUT_OF_HOST_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                    break;
-                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                    break;
-                default:
-                    break;
-            }
-            assert(result == VK_SUCCESS);
-        }
     }
 
     void init_surface_()
@@ -347,6 +287,35 @@ private:
         VkBool32 supported;
         vkGetPhysicalDeviceSurfaceSupportKHR(physical_device_, queue_family_index_, surface_, &supported);
         assert(supported == VK_TRUE);
+    }
+
+    void print_present_modes_()
+    {
+        uint32_t count;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device_, surface_, &count, nullptr);
+
+        vector<VkPresentModeKHR> modes {count};
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device_, surface_, &count, &modes[0]);
+
+        for (auto& mode : modes) {
+            switch (mode) {
+                case VK_PRESENT_MODE_IMMEDIATE_KHR:
+                    cout << "VK_PRESENT_MODE_IMMEDIATE_KHR" << '\n';
+                    break;
+                case VK_PRESENT_MODE_MAILBOX_KHR:
+                    cout << "VK_PRESENT_MODE_MAILBOX_KHR" << '\n';
+                    break;
+                case VK_PRESENT_MODE_FIFO_KHR:
+                    cout << "VK_PRESENT_MODE_FIFO_KHR" << '\n';
+                    break;
+                case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+                    cout << "VK_PRESENT_MODE_FIFO_RELAXED_KHR" << '\n';
+                    break;
+                default:
+                    break;
+            }
+            cout << endl;
+        }
     }
 
     auto default_surface_format_()
@@ -426,12 +395,17 @@ private:
         swapchain_images_.resize(count);
         vkGetSwapchainImagesKHR(device_, swapchain_, &count, &swapchain_images_[0]);
 
+        // 커맨드를 기록하기 위해 커맨드 버퍼의 사용목적을 정의한다.
         VkCommandBufferBeginInfo begin_info {};
 
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+        // 커맨드 버퍼에 커맨드 기록을 시작한다.
         vkBeginCommandBuffer(command_buffer_, &begin_info);
 
+        // 스왑체인 이미지의 레이아웃을 PRESENT_SRC로 변경하는 베리어를 정의한다.
+        // PRESENT_SRC로 변경하는 이유는 렌더링을 위한 커맨드를 단순화하기 위해서이다.
         vector<VkImageMemoryBarrier> barriers;
         for (auto& image : swapchain_images_) {
             VkImageMemoryBarrier barrier {};
@@ -449,6 +423,7 @@ private:
             barriers.push_back(barrier);
         }
 
+        // 정의된 베리어를 실행하는 커맨드를 커맨드 버퍼에 기록한다.
         vkCmdPipelineBarrier(command_buffer_,
                              VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                              0,
@@ -456,16 +431,20 @@ private:
                              0, nullptr,
                              barriers.size(), &barriers[0]);
 
+        // 커맨드 버퍼에 커맨드 기록을 끝마친다.
         vkEndCommandBuffer(command_buffer_);
 
+        // 어떤 기록된 커맨드를 큐에 제출할지 정의한다.
         VkSubmitInfo submit_info {};
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer_;
 
+        // 기록된 커맨드를 큐에 제출한다.
         vkQueueSubmit(queue_, 1, &submit_info, VK_NULL_HANDLE);
 
+        // 커맨드 버퍼들이 모두 처리될 때까지 기다린다.
         vkDeviceWaitIdle(device_);
     }
 
@@ -484,20 +463,6 @@ private:
         vkDestroyCommandPool(device_, command_pool_, nullptr);
     }
 
-    void fini_semaphores_()
-    {
-        // 생성된 세마포어를 파괴한다.
-        for (auto& semaphore : semaphores_)
-            vkDestroySemaphore(device_, semaphore, nullptr);
-    }
-
-    void fini_fences_()
-    {
-        // 생성된 펜스를 파괴한다.
-        for (auto& fence : fences_)
-            vkDestroyFence(device_, fence, nullptr);
-    }
-
     void fini_surface_()
     {
         vkDestroySurfaceKHR(instance_, surface_, nullptr);
@@ -511,6 +476,7 @@ private:
     void on_startup()
     {
         init_surface_();
+        print_present_modes_();
         init_swapchain_();
         init_swapchain_images_();
     }
@@ -523,37 +489,29 @@ private:
 
     void on_render()
     {
-        // 프레젠트 엔진으로 부터 출력가능한 이미지의 인덱스를 얻어온다.
-        // 펜스를 통해 CPU가 언제 렌더링을 진행할 수 있을지 알 수 있다.
-        // 세마포어를 통해 GPU가 언제 렌더링을 진행할 수 있을지 알 수 있다.
-        // 함수 호출시 사용된 세마포어와 펜스는 프레젠트 엔진이 준비가 되면 시그날로 변경된다.
+        // 지금 출력가능한 스왑체인 이미지의 인덱스를 가져온다.
         uint32_t swapchain_index;
-        vkAcquireNextImageKHR(device_, swapchain_, 0,
-                              semaphores_[image_available_index], fences_[image_available_index],
-                              &swapchain_index);
-
-        // 해당 펜스가 프레젠트 엔진으로 부터 시그날 되기까지 기다린다. 시그날이 됬다면 렌더링을 진행할 수 있다.
-        vkWaitForFences(device_, 1, &fences_[image_available_index], VK_TRUE, UINT64_MAX);
-        vkResetFences(device_, 1, &fences_[image_available_index]);
-
-        // 새로운 커맨드들을 기록하기 위해선 제출된 커맨드 버퍼가 모두 처리되어야만 한다.
-        // 이를 알기 위해서 커맨드 버퍼를 제출할때 펜스를 등록하고 새로 커맨드를 기록하기 전에 펜스의 상태를 가져온다.
-        // 만약 시그널이 되지 않았다면 아직 커맨드 버퍼가 GPU에서 처리중이다. 그러므로 시그널이 될때까지 기다린다.
-        if (VK_NOT_READY == vkGetFenceStatus(device_, fences_[rendering_done_index]))
-            vkWaitForFences(device_, 1, &fences_[rendering_done_index], VK_TRUE, UINT64_MAX);
-
-        vkResetFences(device_, 1, &fences_[rendering_done_index]);
-        vkResetCommandBuffer(command_buffer_, 0);
+        vkAcquireNextImageKHR(device_, swapchain_, 0, VK_NULL_HANDLE, VK_NULL_HANDLE, &swapchain_index);
 
         auto& swapchain_image = swapchain_images_[swapchain_index];
 
+        // 커맨드 버퍼에 기록된 커맨드를 리셋한다.
+        vkResetCommandBuffer(command_buffer_, 0);
+
+        // 지금 어플리케이션에선 기록된 커맨드가 바뀌지 않기 때문에 커맨드 버퍼에 커맨드를 다시 기록할 필요는 없다.
+
+        // 커맨드를 기록하기 위해 커맨드 버퍼의 사용목적을 정의한다.
         VkCommandBufferBeginInfo begin_info {};
 
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+        // 커맨드 버퍼에 커맨드 기록을 시작한다.
         vkBeginCommandBuffer(command_buffer_, &begin_info);
 
         {
+            // 이미지의 베리어를 정의한다.
+            // vkCmdClearColorImage를 사용하기 위해선 이미지의 레이아웃이 반드시 SHARED_PRESENT_KHR, GENERAL, TRANSFER_DST_OPTIMAL 중 하나이어야 한다.
             VkImageMemoryBarrier barrier {};
 
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -566,6 +524,7 @@ private:
             barrier.subresourceRange.levelCount = 1;
             barrier.subresourceRange.layerCount = 1;
 
+            // 정의된 배리어를 커맨드로 기록한다.
             vkCmdPipelineBarrier(command_buffer_,
                                  VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                  0,
@@ -574,6 +533,7 @@ private:
                                  1, &barrier);
         }
 
+        // 클리어 색상을 정의한다.
         VkClearColorValue clear_color;
 
         clear_color.float32[0] = 1.0f; // R
@@ -581,19 +541,24 @@ private:
         clear_color.float32[2] = 1.0f; // B
         clear_color.float32[3] = 1.0f; // A
 
+        // 클리어할 이미지의 영역을 정의한다.
         VkImageSubresourceRange subresource_range {};
 
         subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         subresource_range.levelCount = 1;
         subresource_range.layerCount = 1;
 
+        // 정의된 영역에 정의된 색상으로 클리어하는 커맨드를 기록한다.
         vkCmdClearColorImage(command_buffer_,
                              swapchain_image,
                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             &clear_color, 1,
+                             &clear_color,
+                             1,
                              &subresource_range);
 
         {
+            // 이미지의 베리어를 정의한다.
+            // 화면에 출력하기 위해선 이미지의 레이아웃이 반드시 PRESENT_SRC_KHR, SHARED_PRESENT_KHR 중 하나이어야 한다.
             VkImageMemoryBarrier barrier {};
 
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -606,6 +571,7 @@ private:
             barrier.subresourceRange.levelCount = 1;
             barrier.subresourceRange.layerCount = 1;
 
+            // 정의된 배리어를 커맨드로 기록한다.
             vkCmdPipelineBarrier(command_buffer_,
                                  VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                                  0,
@@ -614,38 +580,31 @@ private:
                                  1, &barrier);
         }
 
+        // 커맨드 버퍼의 커맨드 기록을 끝마친다.
         vkEndCommandBuffer(command_buffer_);
 
-        constexpr VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
+        // 어떤 기록된 커맨드를 큐에 제출할지 정의한다.
         VkSubmitInfo submit_info {};
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        // 렌더링을 하기 전에 프레젠트 엔진이 준비가 되어야하며 세마포어를 통해 동기화 한다.
-        // 만약 기다리지 않고 렌더링을 하게 되면 화면에 원하지 않는 결과가 출력된다.
-        submit_info.waitSemaphoreCount = 1;
-        submit_info.pWaitSemaphores = &semaphores_[image_available_index];
-        submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer_;
-        // 화면에 출력하기 전에 렌더링이 끝난것을 기다려야한다.
-        // 만약 기다리지 않고 화면을 출력하면 화면에 원하지 않는 결과가 출력된다.
-        submit_info.signalSemaphoreCount = 1;
-        submit_info.pSignalSemaphores = &semaphores_[rendering_done_index];
 
-        vkQueueSubmit(queue_, 1, &submit_info, fences_[rendering_done_index]);
+        // 기록된 커맨드를 큐에 제출한다.
+        vkQueueSubmit(queue_, 1, &submit_info, VK_NULL_HANDLE);
 
+        // 커맨드 버퍼들이 모두 처리될 때까지 기다린다.
+        vkDeviceWaitIdle(device_);
+
+        // 화면에 출력될 스왑체인 이미지를 정의한다.
         VkPresentInfoKHR present_info {};
 
         present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        // 렌더링이 완료됬음을 보장하기 위해 커맨드 버퍼를 제출할 때 사용한 세마포어를 기다린다.
-        // 만약 기다리지 않고 화면을 출력하면 화면에 원하지 않는 결과가 출력된다.
-        present_info.waitSemaphoreCount = 1;
-        present_info.pWaitSemaphores = &semaphores_[rendering_done_index];
         present_info.swapchainCount = 1;
         present_info.pSwapchains = &swapchain_;
         present_info.pImageIndices = &swapchain_index;
 
+        // 정의된 스왑체인 이미지를 출력한다.
         vkQueuePresentKHR(queue_, &present_info);
     }
 
@@ -658,8 +617,6 @@ private:
     VkQueue queue_;
     VkCommandPool command_pool_;
     VkCommandBuffer command_buffer_;
-    std::array<VkFence, 2> fences_;
-    std::array<VkSemaphore, 2> semaphores_;
     VkSurfaceKHR surface_;
     VkSwapchainKHR swapchain_;
     vector<VkImage> swapchain_images_;
@@ -671,12 +628,12 @@ int main(int argc, char* argv[])
 {
     Window_desc window_desc;
 
-    window_desc.title = L"Chapter4"s;
+    window_desc.title = L"Chapter05"s;
     window_desc.extent = {512, 512, 1};
 
     Window window {window_desc};
 
-    Chapter4 chapter4 {&window};
+    Chapter3 chapter3 {&window};
 
     window.run();
 

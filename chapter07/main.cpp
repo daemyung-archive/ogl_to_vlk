@@ -801,7 +801,7 @@ int main(int argc, char* argv[])
 {
     Window_desc window_desc;
 
-    window_desc.title = L"Chapter5"s;
+    window_desc.title = L"Chapter07"s;
     window_desc.extent = {512, 512, 1};
 
     Window window {window_desc};

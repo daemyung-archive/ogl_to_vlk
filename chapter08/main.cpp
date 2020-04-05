@@ -28,21 +28,12 @@ constexpr auto rendering_done_index {1};
 
 //----------------------------------------------------------------------------------------------------------------------
 
-// 위치와 색상값을 가진 버텍스를 정의한다.
-struct Vertex {
-    float x, y;
-    float r, g, b;
-};
-
-//----------------------------------------------------------------------------------------------------------------------
-
-class Chapter8 {
+class Chapter6 {
 public:
-    Chapter8(Window* window) :
+    Chapter6(Window* window) :
         window_ {window},
         instance_ {VK_NULL_HANDLE},
         physical_device_ {VK_NULL_HANDLE},
-        physical_device_memory_properties_ {},
         queue_family_index_ {UINT32_MAX},
         device_ {VK_NULL_HANDLE},
         queue_ {VK_NULL_HANDLE},
@@ -50,20 +41,14 @@ public:
         command_buffer_ {VK_NULL_HANDLE},
         fence_ {VK_NULL_HANDLE},
         semaphores_ {},
-        vertex_buffer_ {VK_NULL_HANDLE},
         surface_ {VK_NULL_HANDLE},
         swapchain_ {VK_NULL_HANDLE},
         swapchain_image_extent_ {0, 0},
-        render_pass_ {VK_NULL_HANDLE},
-        framebuffers_{},
-        shader_modules_{},
-        pipeline_layout_ {VK_NULL_HANDLE},
-        pipeline_ {VK_NULL_HANDLE}
+        render_pass_ {VK_NULL_HANDLE}
     {
         init_signals_();
         init_instance_();
         find_best_physical_device_();
-        init_physical_device_memory_properties_();
         find_queue_family_index_();
         init_device_();
         init_queue_();
@@ -71,12 +56,10 @@ public:
         init_command_buffer_();
         init_semaphores_();
         init_fence_();
-        init_vertex_resources_();
     }
 
-    ~Chapter8()
+    ~Chapter6()
     {
-        fini_vertex_resources_();
         fini_fence_();
         fini_semaphores_();
         fini_command_pool_();
@@ -87,9 +70,9 @@ public:
 private:
     void init_signals_()
     {
-        window_->startup_signal.connect(this, &Chapter8::on_startup);
-        window_->shutdown_signal.connect(this, &Chapter8::on_shutdown);
-        window_->render_signal.connect(this, &Chapter8::on_render);
+        window_->startup_signal.connect(this, &Chapter6::on_startup);
+        window_->shutdown_signal.connect(this, &Chapter6::on_shutdown);
+        window_->render_signal.connect(this, &Chapter6::on_render);
     }
 
     void init_instance_()
@@ -148,11 +131,6 @@ private:
         }
 
         physical_device_ = physical_devices[0];
-    }
-
-    void init_physical_device_memory_properties_()
-    {
-        vkGetPhysicalDeviceMemoryProperties(physical_device_, &physical_device_memory_properties_);
     }
 
     void find_queue_family_index_()
@@ -320,126 +298,6 @@ private:
         assert(result == VK_SUCCESS);
     }
 
-    uint32_t find_memory_type_index(const VkMemoryRequirements& requirements, VkMemoryPropertyFlags properties)
-    {
-        // 메모리 요구사항과 필요한 메모리 성질을 모두 만족하는 메모리 타입 인덱스를 찾는다.
-        for (auto i = 0; i != physical_device_memory_properties_.memoryTypeCount; ++i) {
-            // 메모리 요구사항이 특정 메모리 타입 인덱스에서 할당가능한지 검사한다.
-            if (!(requirements.memoryTypeBits & (1 << i)))
-                continue;
-
-            // 필요한 메모리 성질을 만족하는지 검사한다.
-            if ((physical_device_memory_properties_.memoryTypes[i].propertyFlags & properties) != properties)
-                continue;
-
-            return i;
-        }
-
-        return UINT32_MAX;
-    }
-
-    void init_vertex_resources_()
-    {
-        // 위의 구조체에서 정의한데로 총 3개의 버텍스를 정의한다.
-        vector<Vertex> vertices = {
-             /*  위치  */ /*   색상    */
-            {-0.5,  0.5, 1.0, 0.0, 0.0},
-            { 0.5,  0.5, 0.0, 1.0, 0.0},
-            { 0.0, -0.5, 0.0, 0.0, 1.0}
-        };
-
-        // 생성하려는 버텍스 버퍼를 정의한다.
-        VkBufferCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        create_info.size = sizeof(Vertex) * vertices.size();
-        // 버퍼의 사용처를 VERTEX_BUFFER_BIT을 설정하지 않으면 버텍스 버퍼로 사용할 수 없다.
-        create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-
-        // 버퍼를 생성한다.
-        auto result = vkCreateBuffer(device_, &create_info, nullptr, &vertex_buffer_);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            default:
-                break;
-        }
-        assert(result == VK_SUCCESS);
-
-        // 버퍼를 사용하기 위한 메모리 요구사항을 쿼리한다.
-        VkMemoryRequirements requirements;
-        vkGetBufferMemoryRequirements(device_, vertex_buffer_, &requirements);
-
-        // 쿼리된 정보를 바탕으로 할당할 메모리를 정의한다.
-        VkMemoryAllocateInfo alloc_info {};
-
-        alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        alloc_info.allocationSize = requirements.size;
-        // CPU에서 접근 가능하고 CPU와 GPU의 메모리 데이터가 항상 일치하는 메모리 타입을 선택한다.
-        alloc_info.memoryTypeIndex = find_memory_type_index(requirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-        // 메모리를 할당한다.
-        result = vkAllocateMemory(device_, &alloc_info, nullptr, &vertex_device_memory_);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            case VK_ERROR_TOO_MANY_OBJECTS:
-                cout << "VK_ERROR_TOO_MANY_OBJECTS" << endl;
-                break;
-            default:
-                break;
-        }
-        assert(result == VK_SUCCESS);
-
-        // 생성된 버퍼와 할당된 메모리를 바인딩한다.
-        result = vkBindBufferMemory(device_, vertex_buffer_, vertex_device_memory_, 0);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            default:
-                break;
-        }
-        assert(result == VK_SUCCESS);
-
-        void* contents;
-        // 메모리에 접근가능한 포인터를 가져온다.
-        result = vkMapMemory(device_, vertex_device_memory_, 0, sizeof(Vertex) * vertices.size(), 0, &contents);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            case VK_ERROR_MEMORY_MAP_FAILED:
-                cout << "VK_ERROR_MEMORY_MAP_FAILED" << endl;
-                break;
-            default:
-                break;
-        }
-        assert(result == VK_SUCCESS);
-
-        // 버텍스 버퍼의 데이터를 메모리에 복사한다.
-        memcpy(contents, &vertices[0], sizeof(Vertex) * vertices.size());
-
-        // 메모리의 접근을 끝마친다.
-        // Vulkan의 경우 vkUnmapMemory를 항상 호출하지 않아도 된다.
-        // 처음에 한번만 vkMapMemory를 호출하고 반환된 주소값을 이용해 메모리를 계속 접근할 수 있다.
-        vkUnmapMemory(device_, vertex_device_memory_);
-    }
-
     void init_surface_()
     {
 #if defined(__APPLE__)
@@ -504,7 +362,7 @@ private:
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device_, surface_, &surface_capabilities);
 
         VkCompositeAlphaFlagBitsKHR composite_alpha;
-        for (auto i = 1; i != 32u; ++i) {
+        for (auto i = 1; i != 32; ++i) {
             VkCompositeAlphaFlagBitsKHR flag = static_cast<VkCompositeAlphaFlagBitsKHR>(0x1 << i);
             if (surface_capabilities.supportedUsageFlags & flag) {
                 composite_alpha = flag;
@@ -717,30 +575,30 @@ private:
     void init_shader_modules_()
     {
         {
+            // 버텍스 셰이더 스테이지에서 사용될 버텍스 셰이더를 정의한다.
+            // gl_VertexIndex는 순차적으로 증가돠며 배열로 정의된 위치 정보를 가져오는데 사용된다.
+            // 위치 정보가 셰이더에 정의되어 있기 때문에 버텍스 버퍼가 필요하지 않는다.
             const string vksl = {
-                // 더이상 셰이더 안에서 정의되어있던 버텍스 정보를 사용하지 않고 버텍스 버퍼로부터 데이터를 읽어온다.
-                "precision mediump float;                 \n"
-                "                                         \n"
-                "layout(location = 0) in vec2 i_pos;      \n"
-                "layout(location = 1) in vec3 i_col;      \n"
-                "                                         \n"
-                "layout(location = 0) out vec3 o_col;     \n"
-                "                                         \n"
-                "void main() {                            \n"
-                "                                         \n"
-                "    gl_Position = vec4(i_pos, 0.0, 1.0); \n"
-                "    o_col = i_col;                       \n"
-                "}                                        \n"
+                "void main() {                                          \n"
+                "    vec2 pos[3] = vec2[3](vec2(-0.5,  0.5),            \n"
+                "                          vec2( 0.5,  0.5),            \n"
+                "                          vec2( 0.0, -0.5));           \n"
+                "                                                       \n"
+                "    gl_Position = vec4(pos[gl_VertexIndex], 0.0, 1.0); \n"
+                "}                                                      \n"
             };
 
+            // SPIR-V 런타임 컴파일러를 이용해 VKSL을 SPIR-V로 컴파일 한다.
             auto spirv = Spirv_compiler().compile(Shader_type::vertex, vksl);
 
+            // 생성하려는 셰이더 모듈을 정의한다.
             VkShaderModuleCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             create_info.codeSize = spirv.size() * sizeof(uint32_t);
             create_info.pCode = &spirv[0];
 
+            // 정의된 셰이더 모듈을 생성한다.
             auto result = vkCreateShaderModule(device_, &create_info, nullptr, &shader_modules_[0]);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -756,26 +614,29 @@ private:
         }
 
         {
+            // 프레그먼 셰이더 스테이지에서 사용될 트프레그먼트 셰이더를 정의한다.
+            // 단순히 초록색을 프레임버퍼게 기록한다.
             const string vksl = {
-                "precision mediump float;                     \n"
-                "                                                \n"
-                "layout(location = 0) in vec3 i_col;             \n"
+                "precision mediump float;                        \n"
                 "                                                \n"
                 "layout(location = 0) out vec4 fragment_color0;  \n"
                 "                                                \n"
                 "void main() {                                   \n"
-                "    fragment_color0 = vec4(i_col, 1.0);         \n"
+                "    fragment_color0 = vec4(0.0, 1.0, 0.0, 1.0); \n"
                 "}                                               \n"
             };
 
+            // SPIR-V 런타임 컴파일러를 이용해 VKSL을 SPIR-V로 컴파일 한다.
             auto spirv = Spirv_compiler().compile(Shader_type::fragment, vksl);
 
+            // 생성하려는 셰이더 모듈을 정의한다.
             VkShaderModuleCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             create_info.codeSize = spirv.size() * sizeof(uint32_t);
             create_info.pCode = &spirv[0];
 
+            // 정의된 셰이더 모듈을 생성한다.
             auto result = vkCreateShaderModule(device_, &create_info, nullptr, &shader_modules_[1]);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -793,10 +654,12 @@ private:
 
     void init_pipeline_layout_()
     {
+        // 어떠한 리소스도 접근하지 않는 파이프라인 레이아웃을 정의한다.
         VkPipelineLayoutCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
+        // 정의된 파이프라인 레이아웃을 생성한다.
         auto result = vkCreatePipelineLayout(device_, &create_info, nullptr, &pipeline_layout_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -813,9 +676,11 @@ private:
 
     void init_pipeline_()
     {
+        // 파이프라인에 사용될 셰이더 스테이지들을 정의한다.
         array<VkPipelineShaderStageCreateInfo, 2> stages;
 
         {
+            // 버텍스 셰이더를 정의한다.
             VkPipelineShaderStageCreateInfo stage {};
 
             stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -827,6 +692,7 @@ private:
         }
 
         {
+            // 프래그먼트 셰이더를 정의한다.
             VkPipelineShaderStageCreateInfo stage {};
 
             stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -837,49 +703,13 @@ private:
             stages[1] = stage;
         }
 
-        // 버텍스 인풋 바인딩을 정의한다.
-        VkVertexInputBindingDescription vertex_input_binding {};
-
-        vertex_input_binding.binding = 0;
-        vertex_input_binding.stride = sizeof(Vertex);
-        vertex_input_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        vector<VkVertexInputAttributeDescription> vertex_input_attributes;
-
-        {
-            // 위치에 대한 버텍스 인풋 어트리뷰트를 정의한다.
-            VkVertexInputAttributeDescription vertex_input_attribute {};
-
-            vertex_input_attribute.location = 0; // 셰이더에서 정의한 로케이션
-            vertex_input_attribute.binding = 0; // 버텍스 버퍼의 바인딩 인덱스
-            vertex_input_attribute.format = VK_FORMAT_R32G32_SFLOAT;
-            vertex_input_attribute.offset = offsetof(Vertex, x);
-
-            vertex_input_attributes.push_back(vertex_input_attribute);
-        }
-
-        {
-            // 색상에 대한 버텍스 인풋 어트리뷰트를 정의한다.
-            VkVertexInputAttributeDescription vertex_input_attribute {};
-
-            vertex_input_attribute.location = 1; // 셰이더에서 정의한 로케이션
-            vertex_input_attribute.binding = 0; // 버텍스 버퍼의 바인딩 인덱스
-            vertex_input_attribute.format = VK_FORMAT_R32G32B32_SFLOAT;
-            vertex_input_attribute.offset = offsetof(Vertex, r);
-
-            vertex_input_attributes.push_back(vertex_input_attribute);
-        }
-
-        // 파이프라인 버텍스 인풋 스테이지를 정의한다.
+        // 버텍스 인풋 스테이지를 정의한다.
+        // 버텍스 버퍼가 사용되지 않기 때문에 버텍스 버퍼를 어떻게 읽을지 정의하지 않는다.
         VkPipelineVertexInputStateCreateInfo vertex_input_state {};
-
-        vertex_input_state.vertexBindingDescriptionCount = 1;
-        vertex_input_state.pVertexBindingDescriptions = &vertex_input_binding;
-        vertex_input_state.vertexAttributeDescriptionCount = vertex_input_attributes.size();
-        vertex_input_state.pVertexAttributeDescriptions = &vertex_input_attributes[0];
 
         vertex_input_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
+        // 파이프라인 인풋 어셈블리 스테이지를 정의한다.
         VkPipelineInputAssemblyStateCreateInfo input_assembly_state {};
 
         input_assembly_state.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -896,6 +726,7 @@ private:
 
         scissor.extent = swapchain_image_extent_;
 
+        // 파이프라인 뷰포트 스테이지를 정의한다.
         VkPipelineViewportStateCreateInfo viewport_state {};
 
         viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -904,6 +735,7 @@ private:
         viewport_state.scissorCount = 1;
         viewport_state.pScissors = &scissor;
 
+        // 파이프라인 레스터라이제이션 스테이지를 정의한다.
         VkPipelineRasterizationStateCreateInfo rasterization_state {};
 
         rasterization_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -911,15 +743,21 @@ private:
         rasterization_state.cullMode = VK_CULL_MODE_NONE;
         rasterization_state.lineWidth = 1.0f;
 
+        // 파이프라인 멀티샘플 스테이지를 정의한다.
+        // MSAA가 사용되지 않더라도 1 샘플에 대해 정의해야한다.
         VkPipelineMultisampleStateCreateInfo multisample_state {};
 
         multisample_state.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisample_state.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
+        // 뎁스 스텐실 스테이지를 정의한다.
+        // 뎁스, 스텐실 테스트를 사용하진 않더라도 사용하지 않는것에 대한 정의가 필요하다.
         VkPipelineDepthStencilStateCreateInfo depth_stencil_state {};
 
         depth_stencil_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 
+        // 파이프라인 컬러 블렌드 어테치먼트에 대해 정의한다.
+        // colorWriteMask가 0이면 프레그먼트의 결과값이 프레임버퍼에 쓰이지 않는다.
         VkPipelineColorBlendAttachmentState attachment {};
 
         attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
@@ -927,12 +765,14 @@ private:
                                   | VK_COLOR_COMPONENT_B_BIT
                                   | VK_COLOR_COMPONENT_A_BIT;
 
+        // 파이프라인 컬러 블렌드 스테이지를 정의한다.
         VkPipelineColorBlendStateCreateInfo color_blend_state {};
 
         color_blend_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         color_blend_state.attachmentCount = 1;
         color_blend_state.pAttachments = &attachment;
 
+        // 생성하려는 그래픽스 파이프라인을 정의한다.
         VkGraphicsPipelineCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -948,6 +788,7 @@ private:
         create_info.layout = pipeline_layout_;
         create_info.renderPass = render_pass_;
 
+        // 정의된 그래픽스 파이프라인을 생성한다.
         auto result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &create_info, nullptr, &pipeline_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -988,15 +829,6 @@ private:
         vkDestroyFence(device_, fence_, nullptr);
     }
 
-    void fini_vertex_resources_()
-    {
-        // 할당된 메모리를 해제한다.
-        vkFreeMemory(device_, vertex_device_memory_, nullptr);
-
-        // 생성된 버퍼를 파괴한다.
-        vkDestroyBuffer(device_, vertex_buffer_, nullptr);
-    }
-
     void fini_surface_()
     {
         vkDestroySurfaceKHR(instance_, surface_, nullptr);
@@ -1026,17 +858,20 @@ private:
 
     void fini_shader_modules_()
     {
+        // 생성된 셰이더 모듈을 파괴한다.
         for (auto& shader_module : shader_modules_)
             vkDestroyShaderModule(device_, shader_module, nullptr);
     }
 
     void fini_pipeline_layout_()
     {
+        // 생성된 파이프라인 레이아웃을 파괴한다.
         vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
     }
 
     void fini_pipeline_()
     {
+        // 생성된 파이프라인을 파괴한다.
         vkDestroyPipeline(device_, pipeline_, nullptr);
     }
 
@@ -1127,11 +962,10 @@ private:
 
         vkCmdBeginRenderPass(command_buffer_, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-        // 사용할 버텍스 버퍼를 바인딩 한다.
-        VkDeviceSize vertex_buffer_offset {0};
-        vkCmdBindVertexBuffers(command_buffer_, 0, 1, &vertex_buffer_, &vertex_buffer_offset);
-
+        // 사용하려는 파이프라인을 바인딩한다.
         vkCmdBindPipeline(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+
+        // 드로우 콜을 생성한다.
         vkCmdDraw(command_buffer_, 3, 1, 0, 0);
 
         vkCmdEndRenderPass(command_buffer_);
@@ -1190,7 +1024,6 @@ private:
     Window* window_;
     VkInstance instance_;
     VkPhysicalDevice physical_device_;
-    VkPhysicalDeviceMemoryProperties physical_device_memory_properties_;
     uint32_t queue_family_index_;
     VkDevice device_;
     VkQueue queue_;
@@ -1198,8 +1031,6 @@ private:
     VkCommandBuffer command_buffer_;
     VkFence fence_;
     std::array<VkSemaphore, 2> semaphores_;
-    VkBuffer vertex_buffer_;
-    VkDeviceMemory vertex_device_memory_;
     VkSurfaceKHR surface_;
     VkSwapchainKHR swapchain_;
     vector<VkImage> swapchain_images_;
@@ -1218,12 +1049,12 @@ int main(int argc, char* argv[])
 {
     Window_desc window_desc;
 
-    window_desc.title = L"Chapter10"s;
+    window_desc.title = L"Chapter08"s;
     window_desc.extent = {512, 512, 1};
 
     Window window {window_desc};
 
-    Chapter8 chapter8 {&window};
+    Chapter6 chapter6 {&window};
 
     window.run();
 

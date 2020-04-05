@@ -464,7 +464,7 @@ int main(int argc, char* argv[])
     // 생성할 윈도우를 정의한다.
     Window_desc window_desc;
 
-    window_desc.title = L"Chapter2"s;
+    window_desc.title = L"Chapter04"s;
     window_desc.extent = {512, 512, 1};
 
     // 윈도우를 생성한다.

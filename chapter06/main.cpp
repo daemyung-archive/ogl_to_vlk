@@ -15,11 +15,9 @@
 #include <array>
 #include <vulkan/vulkan.h>
 #include <platform/Window.h>
-#include <sc/Spirv_compiler.h>
 
 using namespace std;
 using namespace Platform_lib;
-using namespace Sc_lib;
 
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -28,9 +26,9 @@ constexpr auto rendering_done_index {1};
 
 //----------------------------------------------------------------------------------------------------------------------
 
-class Chapter6 {
+class Chapter4 {
 public:
-    Chapter6(Window* window) :
+    Chapter4(Window* window) :
         window_ {window},
         instance_ {VK_NULL_HANDLE},
         physical_device_ {VK_NULL_HANDLE},
@@ -39,12 +37,10 @@ public:
         queue_ {VK_NULL_HANDLE},
         command_pool_ {VK_NULL_HANDLE},
         command_buffer_ {VK_NULL_HANDLE},
-        fence_ {VK_NULL_HANDLE},
         semaphores_ {},
+        fences_ {},
         surface_ {VK_NULL_HANDLE},
-        swapchain_ {VK_NULL_HANDLE},
-        swapchain_image_extent_ {0, 0},
-        render_pass_ {VK_NULL_HANDLE}
+        swapchain_ {VK_NULL_HANDLE}
     {
         init_signals_();
         init_instance_();
@@ -55,12 +51,12 @@ public:
         init_command_pool_();
         init_command_buffer_();
         init_semaphores_();
-        init_fence_();
+        init_fences_();
     }
 
-    ~Chapter6()
+    ~Chapter4()
     {
-        fini_fence_();
+        fini_fences_();
         fini_semaphores_();
         fini_command_pool_();
         fini_device_();
@@ -70,9 +66,9 @@ public:
 private:
     void init_signals_()
     {
-        window_->startup_signal.connect(this, &Chapter6::on_startup);
-        window_->shutdown_signal.connect(this, &Chapter6::on_shutdown);
-        window_->render_signal.connect(this, &Chapter6::on_render);
+        window_->startup_signal.connect(this, &Chapter4::on_startup);
+        window_->shutdown_signal.connect(this, &Chapter4::on_shutdown);
+        window_->render_signal.connect(this, &Chapter4::on_render);
     }
 
     void init_instance_()
@@ -257,10 +253,14 @@ private:
 
     void init_semaphores_()
     {
+        // 생성할 세마포어를 정의한다.
         VkSemaphoreCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
+        // 2개의 세마포어를 생성한다. 세마포어는 GPU와 GPU의 동기화를 위해 사용된다.
+        // 첫번째 세마포어는 프레젠트 엔진으로 부터 이미지가 사용가능한 타이밍을 알기 위해 사용된다. 세마포어가 시그널 된 후 렌더링을 시작할 수 있다.
+        // 두번째 세마포어는 큐에 제출된 커맨드 버퍼가 모두 처리된 타이밍을 알기 위해 사용된다. 세마포어가 시그널 된 후 화면에 출력할 수 있다.
         for (auto& semaphore : semaphores_) {
             auto result = vkCreateSemaphore(device_, &create_info, nullptr, &semaphore);
             switch (result) {
@@ -277,25 +277,32 @@ private:
         }
     }
 
-    void init_fence_()
+    void init_fences_()
     {
+        // 생성할 펜스를 정의한다.
         VkFenceCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        auto result = vkCreateFence(device_, &create_info, nullptr, &fence_);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            default:
-                break;
+        // 2개의 펜스를 생성한다. 펜스는 GPU와 CPU의 동기화를 위해 사용된다.
+        // 첫번째 펜스 프레젠트 엔진으로 부터 이미지가 사용가능한 타이밍을 알기 위해 사용된다. 펜스가 시그널 된 후 렌더링을 시작할 수 있다.
+        // 두번째 펜스는 큐에 제출된 커맨드 버퍼가 모두 처리된 타이밍을 알기 위해 사용된다. 펜스가 시그널 된 후 화면에 출력할 수 있다.
+        for (auto i = 0; i != 2; ++i) {
+            create_info.flags = (i == rendering_done_index) ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
+
+            auto result = vkCreateFence(device_, &create_info, nullptr, &fences_[i]);
+            switch (result) {
+                case VK_ERROR_OUT_OF_HOST_MEMORY:
+                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
+                    break;
+                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
+                    break;
+                default:
+                    break;
+            }
+            assert(result == VK_SUCCESS);
         }
-        assert(result == VK_SUCCESS);
     }
 
     void init_surface_()
@@ -370,8 +377,6 @@ private:
             }
         }
 
-        swapchain_image_extent_ = surface_capabilities.currentExtent;
-
         VkSwapchainCreateInfoKHR create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -379,7 +384,7 @@ private:
         create_info.minImageCount = 2;
         create_info.imageFormat = surface_format.format;
         create_info.imageColorSpace = surface_format.colorSpace;
-        create_info.imageExtent = swapchain_image_extent_;
+        create_info.imageExtent = surface_capabilities.currentExtent;
         create_info.imageArrayLayers = 1;
         create_info.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -464,345 +469,6 @@ private:
         vkDeviceWaitIdle(device_);
     }
 
-    void init_swapchain_image_views_()
-    {
-        auto surface_format = default_surface_format_();
-
-        VkImageViewCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        create_info.format = surface_format.format;
-        create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        create_info.subresourceRange.levelCount = 1;
-        create_info.subresourceRange.layerCount = 1;
-
-        swapchain_image_views_.resize(swapchain_images_.size());
-        for (auto i = 0; i != swapchain_images_.size(); ++i) {
-            create_info.image = swapchain_images_[i];
-
-            auto result = vkCreateImageView(device_, &create_info, nullptr, &swapchain_image_views_[i]);
-            switch (result) {
-                case VK_ERROR_OUT_OF_HOST_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                    break;
-                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                    break;
-                default:
-                    break;
-            }
-            assert(result == VK_SUCCESS);
-        }
-    }
-
-    void init_render_pass_()
-    {
-        auto surface_format = default_surface_format_();
-
-        VkAttachmentDescription attachment_desc {};
-
-        attachment_desc.format = surface_format.format;
-        attachment_desc.samples = VK_SAMPLE_COUNT_1_BIT;
-        attachment_desc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachment_desc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachment_desc.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        attachment_desc.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference color_attachment_ref {};
-
-        color_attachment_ref.attachment = 0;
-        color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription subpass_desc {};
-
-        subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass_desc.colorAttachmentCount = 1;
-        subpass_desc.pColorAttachments = &color_attachment_ref;
-
-        VkRenderPassCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        create_info.attachmentCount = 1;
-        create_info.pAttachments = &attachment_desc;
-        create_info.subpassCount = 1;
-        create_info.pSubpasses = &subpass_desc;
-
-        auto result = vkCreateRenderPass(device_, &create_info, nullptr, &render_pass_);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            default:
-                break;
-        }
-        assert(result == VK_SUCCESS);
-    }
-
-    void init_framebuffers_()
-    {
-        VkFramebufferCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        create_info.renderPass = render_pass_;
-        create_info.attachmentCount = 1;
-        create_info.width = swapchain_image_extent_.width;
-        create_info.height = swapchain_image_extent_.height;
-        create_info.layers = 1;
-
-        framebuffers_.resize(swapchain_image_views_.size());
-        for (auto i = 0; i != swapchain_image_views_.size(); ++i) {
-            create_info.pAttachments = &swapchain_image_views_[i];
-
-            auto result = vkCreateFramebuffer(device_, &create_info, nullptr, &framebuffers_[i]);
-            switch (result) {
-                case VK_ERROR_OUT_OF_HOST_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                    break;
-                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                    break;
-                default:
-                    break;
-            }
-            assert(result == VK_SUCCESS);
-        }
-    }
-
-    void init_shader_modules_()
-    {
-        {
-            // 버텍스 셰이더 스테이지에서 사용될 버텍스 셰이더를 정의한다.
-            // gl_VertexIndex는 순차적으로 증가돠며 배열로 정의된 위치 정보를 가져오는데 사용된다.
-            // 위치 정보가 셰이더에 정의되어 있기 때문에 버텍스 버퍼가 필요하지 않는다.
-            const string vksl = {
-                "void main() {                                          \n"
-                "    vec2 pos[3] = vec2[3](vec2(-0.5,  0.5),            \n"
-                "                          vec2( 0.5,  0.5),            \n"
-                "                          vec2( 0.0, -0.5));           \n"
-                "                                                       \n"
-                "    gl_Position = vec4(pos[gl_VertexIndex], 0.0, 1.0); \n"
-                "}                                                      \n"
-            };
-
-            // SPIR-V 런타임 컴파일러를 이용해 VKSL을 SPIR-V로 컴파일 한다.
-            auto spirv = Spirv_compiler().compile(Shader_type::vertex, vksl);
-
-            // 생성하려는 셰이더 모듈을 정의한다.
-            VkShaderModuleCreateInfo create_info {};
-
-            create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-            create_info.codeSize = spirv.size() * sizeof(uint32_t);
-            create_info.pCode = &spirv[0];
-
-            // 정의된 셰이더 모듈을 생성한다.
-            auto result = vkCreateShaderModule(device_, &create_info, nullptr, &shader_modules_[0]);
-            switch (result) {
-                case VK_ERROR_OUT_OF_HOST_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                    break;
-                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                    break;
-                default:
-                    break;
-            }
-            assert(result == VK_SUCCESS);
-        }
-
-        {
-            // 프레그먼 셰이더 스테이지에서 사용될 트프레그먼트 셰이더를 정의한다.
-            // 단순히 초록색을 프레임버퍼게 기록한다.
-            const string vksl = {
-                "precision mediump float;                        \n"
-                "                                                \n"
-                "layout(location = 0) out vec4 fragment_color0;  \n"
-                "                                                \n"
-                "void main() {                                   \n"
-                "    fragment_color0 = vec4(0.0, 1.0, 0.0, 1.0); \n"
-                "}                                               \n"
-            };
-
-            // SPIR-V 런타임 컴파일러를 이용해 VKSL을 SPIR-V로 컴파일 한다.
-            auto spirv = Spirv_compiler().compile(Shader_type::fragment, vksl);
-
-            // 생성하려는 셰이더 모듈을 정의한다.
-            VkShaderModuleCreateInfo create_info {};
-
-            create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-            create_info.codeSize = spirv.size() * sizeof(uint32_t);
-            create_info.pCode = &spirv[0];
-
-            // 정의된 셰이더 모듈을 생성한다.
-            auto result = vkCreateShaderModule(device_, &create_info, nullptr, &shader_modules_[1]);
-            switch (result) {
-                case VK_ERROR_OUT_OF_HOST_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                    break;
-                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                    cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                    break;
-                default:
-                    break;
-            }
-            assert(result == VK_SUCCESS);
-        }
-    }
-
-    void init_pipeline_layout_()
-    {
-        // 어떠한 리소스도 접근하지 않는 파이프라인 레이아웃을 정의한다.
-        VkPipelineLayoutCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-
-        // 정의된 파이프라인 레이아웃을 생성한다.
-        auto result = vkCreatePipelineLayout(device_, &create_info, nullptr, &pipeline_layout_);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            default:
-                break;
-        }
-        assert(result == VK_SUCCESS);
-    }
-
-    void init_pipeline_()
-    {
-        // 파이프라인에 사용될 셰이더 스테이지들을 정의한다.
-        array<VkPipelineShaderStageCreateInfo, 2> stages;
-
-        {
-            // 버텍스 셰이더를 정의한다.
-            VkPipelineShaderStageCreateInfo stage {};
-
-            stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            stage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-            stage.module = shader_modules_[0];
-            stage.pName = "main";
-
-            stages[0] = stage;
-        }
-
-        {
-            // 프래그먼트 셰이더를 정의한다.
-            VkPipelineShaderStageCreateInfo stage {};
-
-            stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-            stage.module = shader_modules_[1];
-            stage.pName = "main";
-
-            stages[1] = stage;
-        }
-
-        // 버텍스 인풋 스테이지를 정의한다.
-        // 버텍스 버퍼가 사용되지 않기 때문에 버텍스 버퍼를 어떻게 읽을지 정의하지 않는다.
-        VkPipelineVertexInputStateCreateInfo vertex_input_state {};
-
-        vertex_input_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-        // 파이프라인 인풋 어셈블리 스테이지를 정의한다.
-        VkPipelineInputAssemblyStateCreateInfo input_assembly_state {};
-
-        input_assembly_state.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        input_assembly_state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-        VkViewport viewport {};
-
-        viewport.width = swapchain_image_extent_.width;
-        viewport.height = swapchain_image_extent_.height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-
-        VkRect2D scissor {};
-
-        scissor.extent = swapchain_image_extent_;
-
-        // 파이프라인 뷰포트 스테이지를 정의한다.
-        VkPipelineViewportStateCreateInfo viewport_state {};
-
-        viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewport_state.viewportCount = 1;
-        viewport_state.pViewports = &viewport;
-        viewport_state.scissorCount = 1;
-        viewport_state.pScissors = &scissor;
-
-        // 파이프라인 레스터라이제이션 스테이지를 정의한다.
-        VkPipelineRasterizationStateCreateInfo rasterization_state {};
-
-        rasterization_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterization_state.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterization_state.cullMode = VK_CULL_MODE_NONE;
-        rasterization_state.lineWidth = 1.0f;
-
-        // 파이프라인 멀티샘플 스테이지를 정의한다.
-        // MSAA가 사용되지 않더라도 1 샘플에 대해 정의해야한다.
-        VkPipelineMultisampleStateCreateInfo multisample_state {};
-
-        multisample_state.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisample_state.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-        // 뎁스 스텐실 스테이지를 정의한다.
-        // 뎁스, 스텐실 테스트를 사용하진 않더라도 사용하지 않는것에 대한 정의가 필요하다.
-        VkPipelineDepthStencilStateCreateInfo depth_stencil_state {};
-
-        depth_stencil_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-
-        // 파이프라인 컬러 블렌드 어테치먼트에 대해 정의한다.
-        // colorWriteMask가 0이면 프레그먼트의 결과값이 프레임버퍼에 쓰이지 않는다.
-        VkPipelineColorBlendAttachmentState attachment {};
-
-        attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
-                                  | VK_COLOR_COMPONENT_G_BIT
-                                  | VK_COLOR_COMPONENT_B_BIT
-                                  | VK_COLOR_COMPONENT_A_BIT;
-
-        // 파이프라인 컬러 블렌드 스테이지를 정의한다.
-        VkPipelineColorBlendStateCreateInfo color_blend_state {};
-
-        color_blend_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        color_blend_state.attachmentCount = 1;
-        color_blend_state.pAttachments = &attachment;
-
-        // 생성하려는 그래픽스 파이프라인을 정의한다.
-        VkGraphicsPipelineCreateInfo create_info {};
-
-        create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        create_info.stageCount = stages.size();
-        create_info.pStages = &stages[0];
-        create_info.pVertexInputState = & vertex_input_state;
-        create_info.pInputAssemblyState = &input_assembly_state;
-        create_info.pViewportState = &viewport_state;
-        create_info.pRasterizationState = &rasterization_state;
-        create_info.pMultisampleState = &multisample_state;
-        create_info.pDepthStencilState = &depth_stencil_state;
-        create_info.pColorBlendState = &color_blend_state;
-        create_info.layout = pipeline_layout_;
-        create_info.renderPass = render_pass_;
-
-        // 정의된 그래픽스 파이프라인을 생성한다.
-        auto result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &create_info, nullptr, &pipeline_);
-        switch (result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
-                break;
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                cout << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << endl;
-                break;
-            default:
-                break;
-        }
-        assert(result == VK_SUCCESS);
-    }
-
     void fini_instance_()
     {
         vkDestroyInstance(instance_, nullptr);
@@ -820,13 +486,16 @@ private:
 
     void fini_semaphores_()
     {
+        // 생성된 세마포어를 파괴한다.
         for (auto& semaphore : semaphores_)
             vkDestroySemaphore(device_, semaphore, nullptr);
     }
 
-    void fini_fence_()
+    void fini_fences_()
     {
-        vkDestroyFence(device_, fence_, nullptr);
+        // 생성된 펜스를 파괴한다.
+        for (auto& fence : fences_)
+            vkDestroyFence(device_, fence, nullptr);
     }
 
     void fini_surface_()
@@ -839,80 +508,41 @@ private:
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
     }
 
-    void fini_swapchain_image_views_()
-    {
-        for (auto& image_view : swapchain_image_views_)
-            vkDestroyImageView(device_, image_view, nullptr);
-    }
-
-    void fini_render_pass_()
-    {
-        vkDestroyRenderPass(device_, render_pass_, nullptr);
-    }
-
-    void fini_framebuffers_()
-    {
-        for (auto& framebuffer : framebuffers_)
-            vkDestroyFramebuffer(device_, framebuffer, nullptr);
-    }
-
-    void fini_shader_modules_()
-    {
-        // 생성된 셰이더 모듈을 파괴한다.
-        for (auto& shader_module : shader_modules_)
-            vkDestroyShaderModule(device_, shader_module, nullptr);
-    }
-
-    void fini_pipeline_layout_()
-    {
-        // 생성된 파이프라인 레이아웃을 파괴한다.
-        vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
-    }
-
-    void fini_pipeline_()
-    {
-        // 생성된 파이프라인을 파괴한다.
-        vkDestroyPipeline(device_, pipeline_, nullptr);
-    }
-
     void on_startup()
     {
         init_surface_();
         init_swapchain_();
         init_swapchain_images_();
-        init_swapchain_image_views_();
-        init_render_pass_();
-        init_framebuffers_();
-        init_shader_modules_();
-        init_pipeline_layout_();
-        init_pipeline_();
     }
 
     void on_shutdown()
     {
-        vkDeviceWaitIdle(device_);
-
-        fini_pipeline_();
-        fini_pipeline_layout_();
-        fini_shader_modules_();
-        fini_framebuffers_();
-        fini_render_pass_();
-        fini_swapchain_image_views_();
         fini_swapchain_();
         fini_surface_();
     }
 
     void on_render()
     {
+        // 프레젠트 엔진으로 부터 출력가능한 이미지의 인덱스를 얻어온다.
+        // 펜스를 통해 CPU가 언제 렌더링을 진행할 수 있을지 알 수 있다.
+        // 세마포어를 통해 GPU가 언제 렌더링을 진행할 수 있을지 알 수 있다.
+        // 함수 호출시 사용된 세마포어와 펜스는 프레젠트 엔진이 준비가 되면 시그날로 변경된다.
         uint32_t swapchain_index;
         vkAcquireNextImageKHR(device_, swapchain_, 0,
-                              semaphores_[image_available_index], VK_NULL_HANDLE,
+                              semaphores_[image_available_index], fences_[image_available_index],
                               &swapchain_index);
 
-        if (VK_NOT_READY == vkGetFenceStatus(device_, fence_))
-            vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX);
+        // 해당 펜스가 프레젠트 엔진으로 부터 시그날 되기까지 기다린다. 시그날이 됬다면 렌더링을 진행할 수 있다.
+        vkWaitForFences(device_, 1, &fences_[image_available_index], VK_TRUE, UINT64_MAX);
+        vkResetFences(device_, 1, &fences_[image_available_index]);
 
-        vkResetFences(device_, 1, &fence_);
+        // 새로운 커맨드들을 기록하기 위해선 제출된 커맨드 버퍼가 모두 처리되어야만 한다.
+        // 이를 알기 위해서 커맨드 버퍼를 제출할때 펜스를 등록하고 새로 커맨드를 기록하기 전에 펜스의 상태를 가져온다.
+        // 만약 시그널이 되지 않았다면 아직 커맨드 버퍼가 GPU에서 처리중이다. 그러므로 시그널이 될때까지 기다린다.
+        if (VK_NOT_READY == vkGetFenceStatus(device_, fences_[rendering_done_index]))
+            vkWaitForFences(device_, 1, &fences_[rendering_done_index], VK_TRUE, UINT64_MAX);
+
+        vkResetFences(device_, 1, &fences_[rendering_done_index]);
         vkResetCommandBuffer(command_buffer_, 0);
 
         auto& swapchain_image = swapchain_images_[swapchain_index];
@@ -928,7 +558,7 @@ private:
 
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             barrier.srcQueueFamilyIndex = queue_family_index_;
             barrier.dstQueueFamilyIndex = queue_family_index_;
             barrier.image = swapchain_image;
@@ -937,44 +567,37 @@ private:
             barrier.subresourceRange.layerCount = 1;
 
             vkCmdPipelineBarrier(command_buffer_,
-                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                  0,
                                  0, nullptr,
                                  0, nullptr,
                                  1, &barrier);
         }
 
-        VkClearValue clear_value;
+        VkClearColorValue clear_color;
 
-        clear_value.color.float32[0] = 0.15f; // R
-        clear_value.color.float32[1] = 0.15f; // G
-        clear_value.color.float32[2] = 0.15f; // B
-        clear_value.color.float32[3] = 1.0f; // A
+        clear_color.float32[0] = 1.0f; // R
+        clear_color.float32[1] = 0.0f; // G
+        clear_color.float32[2] = 1.0f; // B
+        clear_color.float32[3] = 1.0f; // A
 
-        VkRenderPassBeginInfo render_pass_begin_info {};
+        VkImageSubresourceRange subresource_range {};
 
-        render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        render_pass_begin_info.renderPass = render_pass_;
-        render_pass_begin_info.framebuffer = framebuffers_[swapchain_index];
-        render_pass_begin_info.renderArea.extent = swapchain_image_extent_;
-        render_pass_begin_info.clearValueCount = 1;
-        render_pass_begin_info.pClearValues = &clear_value;
+        subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        subresource_range.levelCount = 1;
+        subresource_range.layerCount = 1;
 
-        vkCmdBeginRenderPass(command_buffer_, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
-
-        // 사용하려는 파이프라인을 바인딩한다.
-        vkCmdBindPipeline(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-
-        // 드로우 콜을 생성한다.
-        vkCmdDraw(command_buffer_, 3, 1, 0, 0);
-
-        vkCmdEndRenderPass(command_buffer_);
+        vkCmdClearColorImage(command_buffer_,
+                             swapchain_image,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             &clear_color, 1,
+                             &subresource_range);
 
         {
             VkImageMemoryBarrier barrier {};
 
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             barrier.srcQueueFamilyIndex = queue_family_index_;
             barrier.dstQueueFamilyIndex = queue_family_index_;
@@ -984,7 +607,7 @@ private:
             barrier.subresourceRange.layerCount = 1;
 
             vkCmdPipelineBarrier(command_buffer_,
-                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                                  0,
                                  0, nullptr,
                                  0, nullptr,
@@ -998,19 +621,25 @@ private:
         VkSubmitInfo submit_info {};
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        // 렌더링을 하기 전에 프레젠트 엔진이 준비가 되어야하며 세마포어를 통해 동기화 한다.
+        // 만약 기다리지 않고 렌더링을 하게 되면 화면에 원하지 않는 결과가 출력된다.
         submit_info.waitSemaphoreCount = 1;
         submit_info.pWaitSemaphores = &semaphores_[image_available_index];
         submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer_;
+        // 화면에 출력하기 전에 렌더링이 끝난것을 기다려야한다.
+        // 만약 기다리지 않고 화면을 출력하면 화면에 원하지 않는 결과가 출력된다.
         submit_info.signalSemaphoreCount = 1;
         submit_info.pSignalSemaphores = &semaphores_[rendering_done_index];
 
-        vkQueueSubmit(queue_, 1, &submit_info, fence_);
+        vkQueueSubmit(queue_, 1, &submit_info, fences_[rendering_done_index]);
 
         VkPresentInfoKHR present_info {};
 
         present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        // 렌더링이 완료됬음을 보장하기 위해 커맨드 버퍼를 제출할 때 사용한 세마포어를 기다린다.
+        // 만약 기다리지 않고 화면을 출력하면 화면에 원하지 않는 결과가 출력된다.
         present_info.waitSemaphoreCount = 1;
         present_info.pWaitSemaphores = &semaphores_[rendering_done_index];
         present_info.swapchainCount = 1;
@@ -1029,18 +658,11 @@ private:
     VkQueue queue_;
     VkCommandPool command_pool_;
     VkCommandBuffer command_buffer_;
-    VkFence fence_;
+    std::array<VkFence, 2> fences_;
     std::array<VkSemaphore, 2> semaphores_;
     VkSurfaceKHR surface_;
     VkSwapchainKHR swapchain_;
     vector<VkImage> swapchain_images_;
-    VkExtent2D swapchain_image_extent_;
-    vector<VkImageView> swapchain_image_views_;
-    VkRenderPass render_pass_;
-    vector<VkFramebuffer> framebuffers_;
-    array<VkShaderModule, 2> shader_modules_;
-    VkPipelineLayout pipeline_layout_;
-    VkPipeline pipeline_;
 };
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -1049,12 +671,12 @@ int main(int argc, char* argv[])
 {
     Window_desc window_desc;
 
-    window_desc.title = L"Chapter6"s;
+    window_desc.title = L"Chapter06"s;
     window_desc.extent = {512, 512, 1};
 
     Window window {window_desc};
 
-    Chapter6 chapter6 {&window};
+    Chapter4 chapter4 {&window};
 
     window.run();
 
