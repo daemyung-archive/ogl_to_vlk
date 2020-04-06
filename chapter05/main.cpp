@@ -337,8 +337,8 @@ private:
         VkSurfaceCapabilitiesKHR surface_capabilities;
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device_, surface_, &surface_capabilities);
 
-        VkCompositeAlphaFlagBitsKHR composite_alpha;
-        for (auto i = 1; i != 32; ++i) {
+        VkCompositeAlphaFlagBitsKHR composite_alpha {static_cast<VkCompositeAlphaFlagBitsKHR>(0)};
+        for (auto i = 0; i != 32; ++i) {
             VkCompositeAlphaFlagBitsKHR flag = static_cast<VkCompositeAlphaFlagBitsKHR>(0x1 << i);
             if (surface_capabilities.supportedUsageFlags & flag) {
                 composite_alpha = flag;
