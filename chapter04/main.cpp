@@ -86,7 +86,11 @@ private:
         // 인스턴스 생성시 사용하려는 인스턴스 익스텐션을 정의하지 않으면 사용할 수 없다.
         vector<const char*> extension_names {
             "VK_KHR_surface",
+#if defined(_WIN64)
+            "VK_KHR_win32_surface"
+#else
             "VK_MVK_macos_surface"
+#endif
         };
 
         VkInstanceCreateInfo create_info {};

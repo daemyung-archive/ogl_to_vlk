@@ -19,7 +19,7 @@
 
 using namespace std;
 using namespace Platform_lib;
-using namespace Sc_lib;
+using namespace Sc;
 
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -118,7 +118,11 @@ private:
 
         vector<const char*> extension_names {
             "VK_KHR_surface",
+#if defined(_WIN64)
+            "VK_KHR_win32_surface"
+#else
             "VK_MVK_macos_surface"
+#endif
         };
 
         VkInstanceCreateInfo create_info {};

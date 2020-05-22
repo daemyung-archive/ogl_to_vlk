@@ -8,7 +8,7 @@
 #include <sc/Spirv_compiler.h>
 
 using namespace std;
-using namespace Sc_lib;
+using namespace Sc;
 
 //----------------------------------------------------------------------------------------------------------------------
 
