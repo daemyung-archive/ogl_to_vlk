@@ -3,6 +3,7 @@
 // See "LICENSE" for license information.
 //
 
+#include <cassert>
 #include <iostream>
 #include <vector>
 #include <vulkan/vulkan.h>
