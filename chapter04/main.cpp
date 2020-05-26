@@ -16,7 +16,7 @@
 #include <platform/Window.h>
 
 using namespace std;
-using namespace Platform_lib;
+using namespace Platform;
 
 //----------------------------------------------------------------------------------------------------------------------
 

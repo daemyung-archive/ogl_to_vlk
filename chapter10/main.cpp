@@ -18,7 +18,7 @@
 #include <sc/Spirv_compiler.h>
 
 using namespace std;
-using namespace Platform_lib;
+using namespace Platform;
 using namespace Sc;
 
 //----------------------------------------------------------------------------------------------------------------------

@@ -21,7 +21,7 @@
 #include <sc/Spirv_compiler.h>
 
 using namespace std;
-using namespace Platform_lib;
+using namespace Platform;
 using namespace Sc;
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -1875,7 +1875,7 @@ private:
         auto& semaphores = semaphores_[frame_index_];
 
         uint32_t swapchain_index;
-        vkAcquireNextImageKHR(device_, swapchain_, 0,
+        auto result = vkAcquireNextImageKHR(device_, swapchain_, 0,
                               semaphores[image_available_index], VK_NULL_HANDLE,
                               &swapchain_index);
 

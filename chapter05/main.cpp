@@ -16,7 +16,7 @@
 #include <platform/Window.h>
 
 using namespace std;
-using namespace Platform_lib;
+using namespace Platform;
 
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -495,7 +495,7 @@ private:
     {
         // 지금 출력가능한 스왑체인 이미지의 인덱스를 가져온다.
         uint32_t swapchain_index;
-        vkAcquireNextImageKHR(device_, swapchain_, 0, VK_NULL_HANDLE, VK_NULL_HANDLE, &swapchain_index);
+        while (VK_NOT_READY == vkAcquireNextImageKHR(device_, swapchain_, 0, VK_NULL_HANDLE, VK_NULL_HANDLE, &swapchain_index)) {};
 
         auto& swapchain_image = swapchain_images_[swapchain_index];
 
