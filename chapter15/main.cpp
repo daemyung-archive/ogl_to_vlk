@@ -1875,7 +1875,7 @@ private:
         auto& semaphores = semaphores_[frame_index_];
 
         uint32_t swapchain_index;
-        auto result = vkAcquireNextImageKHR(device_, swapchain_, 0,
+        auto result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
                               semaphores[image_available_index], VK_NULL_HANDLE,
                               &swapchain_index);
 

@@ -532,7 +532,7 @@ private:
         // 세마포어를 통해 GPU가 언제 렌더링을 진행할 수 있을지 알 수 있다.
         // 함수 호출시 사용된 세마포어와 펜스는 프레젠트 엔진이 준비가 되면 시그날로 변경된다.
         uint32_t swapchain_index;
-        vkAcquireNextImageKHR(device_, swapchain_, 0,
+        vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
                               semaphores_[image_available_index], fences_[image_available_index],
                               &swapchain_index);
 

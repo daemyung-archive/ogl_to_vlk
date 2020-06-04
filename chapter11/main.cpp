@@ -1286,7 +1286,7 @@ private:
     void on_render()
     {
         uint32_t swapchain_index;
-        vkAcquireNextImageKHR(device_, swapchain_, 0,
+        vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
                               semaphores_[image_available_index], VK_NULL_HANDLE,
                               &swapchain_index);
 
