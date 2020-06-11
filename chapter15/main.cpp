@@ -46,9 +46,9 @@ struct Material {
 
 //----------------------------------------------------------------------------------------------------------------------
 
-class Chapter12 {
+class Chapter15 {
 public:
-    Chapter12(Window* window) :
+    Chapter15(Window* window) :
         window_ {window},
         instance_ {VK_NULL_HANDLE},
         physical_device_ {VK_NULL_HANDLE},
@@ -102,7 +102,7 @@ public:
         init_texture_resources_();
     }
 
-    ~Chapter12()
+    ~Chapter15()
     {
         fini_texture_resources_();
         fini_uniform_resources_();
@@ -118,9 +118,9 @@ public:
 private:
     void init_signals_()
     {
-        window_->startup_signal.connect(this, &Chapter12::on_startup);
-        window_->shutdown_signal.connect(this, &Chapter12::on_shutdown);
-        window_->render_signal.connect(this, &Chapter12::on_render);
+        window_->startup_signal.connect(this, &Chapter15::on_startup);
+        window_->shutdown_signal.connect(this, &Chapter15::on_shutdown);
+        window_->render_signal.connect(this, &Chapter15::on_render);
     }
 
     void init_instance_()
@@ -2121,7 +2121,7 @@ int main(int argc, char* argv[])
 
     Window window {window_desc};
 
-    Chapter12 chapter12 {&window};
+    Chapter15 chapter15 {&window};
 
     window.run();
 

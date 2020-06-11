@@ -84,9 +84,9 @@ auto& operator<<(ostream& os, const VkMemoryHeap memory_heap)
 
 //----------------------------------------------------------------------------------------------------------------------
 
-class Chapter7 {
+class Chapter9 {
 public:
-    Chapter7() :
+    Chapter9() :
         instance_ {VK_NULL_HANDLE},
         physical_device_ {VK_NULL_HANDLE}
     {
@@ -94,7 +94,7 @@ public:
         init_physical_device_();
     }
 
-    ~Chapter7()
+    ~Chapter9()
     {
         fini_instance_();
     }
@@ -153,9 +153,9 @@ private:
 
 int main(int argc, char* argv[])
 {
-    Chapter7 chapter7;
+    Chapter9 chapter9;
 
-    chapter7.print_memory_properties();
+    chapter9.print_memory_properties();
 
     return 0;
 }

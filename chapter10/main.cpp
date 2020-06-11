@@ -36,9 +36,9 @@ struct Vertex {
 
 //----------------------------------------------------------------------------------------------------------------------
 
-class Chapter8 {
+class Chapter10 {
 public:
-    Chapter8(Window* window) :
+    Chapter10(Window* window) :
         window_ {window},
         instance_ {VK_NULL_HANDLE},
         physical_device_ {VK_NULL_HANDLE},
@@ -74,7 +74,7 @@ public:
         init_vertex_resources_();
     }
 
-    ~Chapter8()
+    ~Chapter10()
     {
         fini_vertex_resources_();
         fini_fence_();
@@ -87,9 +87,9 @@ public:
 private:
     void init_signals_()
     {
-        window_->startup_signal.connect(this, &Chapter8::on_startup);
-        window_->shutdown_signal.connect(this, &Chapter8::on_shutdown);
-        window_->render_signal.connect(this, &Chapter8::on_render);
+        window_->startup_signal.connect(this, &Chapter10::on_startup);
+        window_->shutdown_signal.connect(this, &Chapter10::on_shutdown);
+        window_->render_signal.connect(this, &Chapter10::on_render);
     }
 
     void init_instance_()
@@ -1227,7 +1227,7 @@ int main(int argc, char* argv[])
 
     Window window {window_desc};
 
-    Chapter8 chapter8 {&window};
+    Chapter10 chapter10 {&window};
 
     window.run();
 

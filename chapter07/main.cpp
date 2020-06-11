@@ -26,9 +26,9 @@ constexpr auto rendering_done_index {1};
 
 //----------------------------------------------------------------------------------------------------------------------
 
-class Chapter5 {
+class Chapter7 {
 public:
-    Chapter5(Window* window) :
+    Chapter7(Window* window) :
         window_ {window},
         instance_ {VK_NULL_HANDLE},
         physical_device_ {VK_NULL_HANDLE},
@@ -56,7 +56,7 @@ public:
         init_fence_();
     }
 
-    ~Chapter5()
+    ~Chapter7()
     {
         fini_fence_();
         fini_semaphores_();
@@ -68,9 +68,9 @@ public:
 private:
     void init_signals_()
     {
-        window_->startup_signal.connect(this, &Chapter5::on_startup);
-        window_->shutdown_signal.connect(this, &Chapter5::on_shutdown);
-        window_->render_signal.connect(this, &Chapter5::on_render);
+        window_->startup_signal.connect(this, &Chapter7::on_startup);
+        window_->shutdown_signal.connect(this, &Chapter7::on_shutdown);
+        window_->render_signal.connect(this, &Chapter7::on_render);
     }
 
     void init_instance_()
@@ -810,7 +810,7 @@ int main(int argc, char* argv[])
 
     Window window {window_desc};
 
-    Chapter5 chapter5 {&window};
+    Chapter7 chapter7 {&window};
 
     window.run();
 
