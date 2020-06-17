@@ -456,7 +456,7 @@ private:
         // 커맨드 버퍼에 커맨드 기록을 시작한다.
         vkBeginCommandBuffer(command_buffer_, &begin_info);
 
-        // 스왑체인 이미지의 레이아웃을 PRESENT_SRC로 변경하는 베리어를 정의한다.
+        // 스왑체인 이미지의 레이아웃을 PRESENT_SRC로 변경하는 배리어를 정의한다.
         // PRESENT_SRC로 변경하는 이유는 렌더링을 위한 커맨드를 단순화하기 위해서이다.
         vector<VkImageMemoryBarrier> barriers;
         for (auto& image : swapchain_images_) {
@@ -475,7 +475,7 @@ private:
             barriers.push_back(barrier);
         }
 
-        // 정의된 베리어를 실행하는 커맨드를 커맨드 버퍼에 기록한다.
+        // 정의된 배리어를 실행하는 커맨드를 커맨드 버퍼에 기록한다.
         vkCmdPipelineBarrier(command_buffer_,
                              VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                              0,
@@ -546,7 +546,7 @@ private:
 
     void on_render()
     {
-        // 현재 출력 가능한 스왑체인 이미지의 인덱스를 가져오기 위한 변수룰 선언합니다.
+        // 현재 출력 가능한 스왑체인 이미지의 인덱스를 가져오기 위한 변수를 선언합니다.
         uint32_t swapchain_index;
 
         // 현재 출력 가능한 스왑체인 이미지의 인덱스를 가져옵니다.
@@ -570,15 +570,17 @@ private:
         vkBeginCommandBuffer(command_buffer_, &begin_info);
 
         {
-            // 이미지 베리어를 정의하기 위한 변수를 선언합니다.
+            // 이미지 배리어를 정의하기 위한 변수를 선언합니다.
             VkImageMemoryBarrier barrier {};
 
-            // 이미지 베리어를 정의합니다. 이미지를 클리어하기 위해서는
+            // 이미지 배리어를 정의합니다. 이미지를 클리어하기 위해서는
             // 이미지 레이아웃이 반드시 아래 레이아웃 중에 한 레이아웃이어야 합니다.
             // - SHARED_PRESENT_KHR
             // - GENERAL
             // - TRANSFER_DST_OPTIMAL
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
             barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             barrier.srcQueueFamilyIndex = queue_family_index_;
@@ -588,7 +590,7 @@ private:
             barrier.subresourceRange.levelCount = 1;
             barrier.subresourceRange.layerCount = 1;
 
-            // 이미지 레이아웃 변경을 위한 파이프라인 베리어 커맨드를 기록합니다.
+            // 이미지 레이아웃 변경을 위한 파이프라인 배리어 커맨드를 기록합니다.
             vkCmdPipelineBarrier(command_buffer_,
                                  VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                  0,
@@ -623,14 +625,16 @@ private:
                              &subresource_range);
 
         {
-            // 이미지 베리어를 정의하기 위한 변수를 선언합니다.
+            // 이미지 배리어를 정의하기 위한 변수를 선언합니다.
             VkImageMemoryBarrier barrier {};
 
-            // 이미지 베리어를 정의합니다. 이미지를 화면에 출력하기 위해서는
+            // 이미지 배리어를 정의합니다. 이미지를 화면에 출력하기 위해서는
             // 이미지 레이아웃이 반드시 아래 레이아웃 중에 한 레이아웃이어야 합니다.
             // - PRESENT_SRC_KHR
             // - SHARED_PRESENT_KHR
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = 0;
             barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             barrier.srcQueueFamilyIndex = queue_family_index_;
@@ -640,7 +644,7 @@ private:
             barrier.subresourceRange.levelCount = 1;
             barrier.subresourceRange.layerCount = 1;
 
-            // 이미지 레이아웃 변경을 위한 파이프라인 베리어 커맨드를 기록합니다.
+            // 이미지 레이아웃 변경을 위한 파이프라인 배리어 커맨드를 기록합니다.
             vkCmdPipelineBarrier(command_buffer_,
                                  VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                                  0,
@@ -649,7 +653,7 @@ private:
                                  1, &barrier);
         }
 
-        // 필요한 모든 명령들을 기록했기 때문에 커맨드 버퍼의 커맨드 기록을 끝마칩니다.
+        // 필요한 모든 커맨드들을 기록했기 때문에 커맨드 버퍼의 커맨드 기록을 끝마칩니다.
         // 커맨드 버퍼의 상태는 실행 가능 상태입니다.
         vkEndCommandBuffer(command_buffer_);
 
