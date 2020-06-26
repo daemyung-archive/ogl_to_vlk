@@ -628,6 +628,8 @@ private:
 
     void on_shutdown()
     {
+        vkDeviceWaitIdle(device_);
+
         fini_swapchain_();
         fini_surface_();
     }
@@ -781,6 +783,7 @@ private:
         submit_info.signalSemaphoreCount = 1;
         submit_info.pSignalSemaphores = &semaphores_[rendering_done_index];
 
+        // 큐에 커맨드 버퍼를 제출합니다.
         vkQueueSubmit(queue_, 1, &submit_info, fences_[rendering_done_index]);
 
         // 화면에 출력되는 이미지를 정의하기 위한 변수를 선언합니다.
@@ -788,7 +791,6 @@ private:
 
         // 화면에 출력되는 이미지를 정의합니다.
         present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
         // 커맨드 버퍼가 처리되기를 보장하기 위해 기다려야하는 세마포어를 정의합니다.
         // 기다리지 않고 출력한다면 원하지 않는 결과가 화면에 출력됩니다.
         present_info.waitSemaphoreCount = 1;
