@@ -1,6 +1,0 @@
-[submodule "platform"]
-	path = platform
-	url = https://github.com/daemyung/platform.git
-[submodule "sc"]
-	path = sc
-	url = https://github.com/daemyung/sc.git
