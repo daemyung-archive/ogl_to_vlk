@@ -15,14 +15,7 @@
 이 프로젝트는 다른 프로젝트에 의존성이 있기 때문에 재귀적으로 소스를 받아야 합니다.
 
 ```
-git clone --recursive https://github.com/daemyung/ogl_to_vlk.git
-```
-
-만약 재귀적으로 소스를 받지 않으셨다면 직접 외부 모듈을 업데이트해야 합니다.
-
-```
-git submodule init
-git submodule update
+git clone https://github.com/daemyung/ogl_to_vlk.git
 ```
 
 ## 프로젝트 파일 생성
