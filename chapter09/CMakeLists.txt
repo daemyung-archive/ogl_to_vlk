@@ -1,4 +1,5 @@
 add_executable(chapter09
+    vk_mem_alloc.h
 	main.cpp
 )
 
