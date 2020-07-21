@@ -28,10 +28,10 @@ constexpr auto rendering_done_index {1};
 
 //----------------------------------------------------------------------------------------------------------------------
 
-// 위치와 색상값을 가진 버텍스를 정의한다.
+// 위치와 색상 정보를 가진 버텍스 정보를 정의합니다.
 struct Vertex {
-    float x, y;
-    float r, g, b;
+    float x, y, z; // 위치 정보
+    float r, g, b; // 색상 정보
 };
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -94,10 +94,15 @@ private:
 
     void init_instance_()
     {
+        // 벌칸 프로그램을 작성하는데 있어서 반드시 필요한 레이어입니다.
+        // 하지만 CPU를 굉장히 많이 사용하기 때문에 개발중에만 사용해야 합니다.
         vector<const char*> layer_names {
             "VK_LAYER_KHRONOS_validation"
         };
 
+        // 사용하려는 인스턴스 익스텐션의 이름을 정의합니다.
+        // 사용하려는 익스텐션들이 시스템에서 지원되는지 먼저 확인해야합니다.
+        // 예제의 간소화를 위해서 사용하려는 익스텐션들을 확인 없이 사용합니다.
         vector<const char*> extension_names {
             "VK_KHR_surface",
 #if defined(_WIN64)
@@ -107,6 +112,7 @@ private:
 #endif
         };
 
+        // 생성하려는 인스턴스를 정의합니다.
         VkInstanceCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -115,6 +121,7 @@ private:
         create_info.enabledExtensionCount = extension_names.size();
         create_info.ppEnabledExtensionNames = &extension_names[0];
 
+        // 인스턴스를 생성합니다.
         auto result = vkCreateInstance(&create_info, nullptr, &instance_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -140,17 +147,24 @@ private:
 
     void find_best_physical_device_()
     {
+        // 사용가능한 물리 디바이스의 수를 얻기 위한 변수를 선언합니다.
         uint32_t count {0};
+
+        // 사용가능한 물리 디바이스의 수를 얻어옵니다.
         vkEnumeratePhysicalDevices(instance_, &count, nullptr);
 
-        vector<VkPhysicalDevice> physical_devices {count};
+        // 사용가능한 물리 디바이스들의 정보를 얻기 위한 변수를 선언합니다.
+        vector<VkPhysicalDevice> physical_devices;
+
+        // 사용가능한 물리 디바이스들의 정보를 얻기 위한 메모리를 할당합니다.
+        physical_devices.resize(count);
+
+        // 사용가능한 물리 디바이스들의 핸들을 얻어옵니다.
         vkEnumeratePhysicalDevices(instance_, &count, &physical_devices[0]);
 
-        for (auto &physical_device : physical_devices) {
-            VkPhysicalDeviceProperties properties;
-            vkGetPhysicalDeviceProperties(physical_device, &properties);
-        }
-
+        // 어플리케이션에선 사용가능한 물리 디바이스들 중에서 어플리케이션에
+        // 적합한 물리 디바이스를 찾아야 합니다.
+        // 예제의 간소화를 위해서 첫 번째 물리 디바이스를 사용합니다.
         physical_device_ = physical_devices[0];
     }
 
@@ -161,28 +175,46 @@ private:
 
     void find_queue_family_index_()
     {
+        // 사용가능한 큐 패밀리의 수를 얻기 위한 변수를 선언합니다.
         uint32_t count {0};
+
+        // 사용가능한 큐 패밀리의 수를 얻어옵니다.
         vkGetPhysicalDeviceQueueFamilyProperties(physical_device_, &count, 0);
 
-        vector<VkQueueFamilyProperties> properties {count};
+        // 사용가능한 큐 패밀리의 정보를 얻기 위한 변수를 선언합니다.
+        vector<VkQueueFamilyProperties> properties;
+
+        // 사용가능한 큐 패밀리의 정보를 얻기 위한 메모리를 할당합니다.
+        properties.resize(count);
+
+        // 사용가능한 큐 패밀리의 정보를 얻어옵니다.
         vkGetPhysicalDeviceQueueFamilyProperties(physical_device_, &count, &properties[0]);
 
         for (auto i = 0; i != properties.size(); ++i) {
+            // 큐 패밀리에서 사용가능한 큐가 있는지 확인합니다.
             if (properties[i].queueCount < 1)
                 continue;
 
+            // 큐 패밀리가 그래픽스 기능을 제공하는지 확인합니다.
             if (VK_QUEUE_GRAPHICS_BIT & properties[i].queueFlags) {
                 queue_family_index_ = i;
                 break;
             }
+
+            // 컴퓨트, 복사에 특화된 큐 패밀리가 존재할 수 있습니다.
+            // 목적에 맞는 큐 패밀리를 사용하시면 어플리케이션을 더 효율적으로 동작시킬 수 있습니다.
+            // 예제의 간소화를 위해서 그래픽스를 지원하는 한개의 큐 패밀리만 사용합니다.
         }
         assert(queue_family_index_ != UINT32_MAX);
     }
 
     void init_device_()
     {
+        // 큐의 우선순위를 지정합니다.
+        // 여러개의 큐를 사용할 경우 다르게 우선순위를 지정할 수 있습니다.
         constexpr auto priority = 1.0f;
 
+        // 생성하려는 큐를 정의합니다.
         VkDeviceQueueCreateInfo queue_create_info {};
 
         queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -190,10 +222,14 @@ private:
         queue_create_info.queueCount = 1;
         queue_create_info.pQueuePriorities = &priority;
 
+        // 사용하려는 디바이스 익스텐션의 이름을 정의합니다.
+        // 사용하려는 익스텐션들이 시스템에서 지원되는지 먼저 확인해야합니다.
+        // 예제의 간소화를 위해서 사용하려는 익스텐션들을 확인 없이 사용합니다.
         vector<const char*> extension_names {
-                "VK_KHR_swapchain",
+            "VK_KHR_swapchain",
         };
 
+        // 생성하려는 디바이스를 정의합니다.
         VkDeviceCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -202,6 +238,7 @@ private:
         create_info.enabledExtensionCount = extension_names.size();
         create_info.ppEnabledExtensionNames = &extension_names[0];
 
+        // 디바이스를 생성합니다.
         auto result = vkCreateDevice(physical_device_, &create_info, nullptr, &device_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -233,17 +270,20 @@ private:
 
     void init_queue_()
     {
+        // 디바이스로 부터 생성된 큐의 핸들을 얻어옵니다.
         vkGetDeviceQueue(device_, queue_family_index_, 0, &queue_);
     }
 
     void init_command_pool_()
     {
+        // 생성하려는 커맨드 풀을 정의합니다.
         VkCommandPoolCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         create_info.queueFamilyIndex = queue_family_index_;
 
+        // 커맨드 풀을 생성합니다.
         auto result = vkCreateCommandPool(device_, &create_info, nullptr, &command_pool_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -260,6 +300,7 @@ private:
 
     void init_command_buffer_()
     {
+        // 생성할 커맨드 버퍼를 정의합니다.
         VkCommandBufferAllocateInfo allocate_info {};
 
         allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -267,6 +308,7 @@ private:
         allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocate_info.commandBufferCount = 1;
 
+        // 커맨드 버퍼를 생성합니다.
         auto result = vkAllocateCommandBuffers(device_, &allocate_info, &command_buffer_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -283,10 +325,16 @@ private:
 
     void init_semaphores_()
     {
+        // 세마포어는 큐와 큐의 동기화를 위해 사용됩니다.
+
+        // 생성하려는 세마포어를 정의합니다.
         VkSemaphoreCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
+        // 두 개의 세마포어를 생성합니다.
+        // - 첫 번째 세마포어는 스왑체인 이미지가 준비된 후에 제출한 커맨드 버퍼가 처리되기 위해 사용됩니다.
+        // - 두 번째 세마포어는 제출한 커맨드 버퍼가 처리된 후에 화면에 출력을 하기 위해 사용됩니다.
         for (auto& semaphore : semaphores_) {
             auto result = vkCreateSemaphore(device_, &create_info, nullptr, &semaphore);
             switch (result) {
@@ -305,12 +353,18 @@ private:
 
     void init_fence_()
     {
+        // 펜스는 호스트와 디바이스의 동기화를 위해 사용됩니다.
+
+        // 생성하려는 펜스를 정의합니다.
         VkFenceCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        // 커맨드 버퍼가 모두 처리됬는지를 알기 위해 사용된 펜스는 처음에 시그널 상태면 어플리케이션의 로직이 단순해집니다.
         create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
+        // 펜스를 생성합니다.
         auto result = vkCreateFence(device_, &create_info, nullptr, &fence_);
+
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
                 cout << "VK_ERROR_OUT_OF_HOST_MEMORY" << endl;
@@ -326,41 +380,42 @@ private:
 
     uint32_t find_memory_type_index(const VkMemoryRequirements& requirements, VkMemoryPropertyFlags properties)
     {
-        // 메모리 요구사항과 필요한 메모리 성질을 모두 만족하는 메모리 타입 인덱스를 찾는다.
+        // 메모리 요구사항과 필요한 메모리 성질을 모두 만족하는 메모리 타입 인덱스를 찾습니다.
         for (auto i = 0; i != physical_device_memory_properties_.memoryTypeCount; ++i) {
-            // 메모리 요구사항이 특정 메모리 타입 인덱스에서 할당가능한지 검사한다.
+            // 메모리가 i번째 메모리 타입에 할당 가능한지 검사합니다.
             if (!(requirements.memoryTypeBits & (1 << i)))
                 continue;
 
-            // 필요한 메모리 성질을 만족하는지 검사한다.
+            // 개발자가 요구한 메모리 성질을 만족하는지 검사합니다.
             if ((physical_device_memory_properties_.memoryTypes[i].propertyFlags & properties) != properties)
                 continue;
 
             return i;
         }
 
+        assert(false);
         return UINT32_MAX;
     }
 
     void init_vertex_resources_()
     {
-        // 위의 구조체에서 정의한데로 총 3개의 버텍스를 정의한다.
+        // 삼각형을 그리기 위해 필요한 버텍스 정보를 정의합니다.
         vector<Vertex> vertices = {
-             /*  위치  */ /*   색상    */
-            {-0.5,  0.5, 1.0, 0.0, 0.0},
-            { 0.5,  0.5, 0.0, 1.0, 0.0},
-            { 0.0, -0.5, 0.0, 0.0, 1.0}
+             /*    위치     */ /*   색상    */
+            { 0.0, -0.5, 0.0, 1.0, 0.0, 0.0},
+            { 0.5,  0.5, 0.0, 0.0, 1.0, 0.0},
+            {-0.5,  0.5, 0.0, 0.0, 0.0, 1.0}
         };
 
-        // 생성하려는 버텍스 버퍼를 정의한다.
+        // 생성하려는 버텍스 버퍼를 정의합니다.
         VkBufferCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         create_info.size = sizeof(Vertex) * vertices.size();
-        // 버퍼의 사용처를 VERTEX_BUFFER_BIT을 설정하지 않으면 버텍스 버퍼로 사용할 수 없다.
+        // 버퍼의 사용처를 VERTEX_BUFFER_BIT을 설정하지 않으면 버텍스 버퍼로 사용할 수 없습니다.
         create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
-        // 버퍼를 생성한다.
+        // 버퍼를 생성합니다.
         auto result = vkCreateBuffer(device_, &create_info, nullptr, &vertex_buffer_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -374,19 +429,21 @@ private:
         }
         assert(result == VK_SUCCESS);
 
-        // 버퍼를 사용하기 위한 메모리 요구사항을 쿼리한다.
+        // 메모리 요구사항을 얻어올 변수를 선언합니다.
         VkMemoryRequirements requirements;
+
+        // 버퍼를 위해 필요한 메모리 요구사항을 얻어옵니다.
         vkGetBufferMemoryRequirements(device_, vertex_buffer_, &requirements);
 
-        // 쿼리된 정보를 바탕으로 할당할 메모리를 정의한다.
+        // 할당하려는 메모리를 정의합니다.
         VkMemoryAllocateInfo alloc_info {};
 
         alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         alloc_info.allocationSize = requirements.size;
-        // CPU에서 접근 가능하고 CPU와 GPU의 메모리 데이터가 항상 일치하는 메모리 타입을 선택한다.
+        // CPU에서 접근 가능하고 CPU와 GPU의 메모리 동기화가 보장되는 메모리 타입을 선택합니다.
         alloc_info.memoryTypeIndex = find_memory_type_index(requirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-        // 메모리를 할당한다.
+        // 메모리를 할당합니다.
         result = vkAllocateMemory(device_, &alloc_info, nullptr, &vertex_device_memory_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -403,7 +460,7 @@ private:
         }
         assert(result == VK_SUCCESS);
 
-        // 생성된 버퍼와 할당된 메모리를 바인딩한다.
+        // 버퍼와 메모리를 바인드합니다.
         result = vkBindBufferMemory(device_, vertex_buffer_, vertex_device_memory_, 0);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -417,8 +474,8 @@ private:
         }
         assert(result == VK_SUCCESS);
 
+        // CPU에서 메모리에 접근하기 위한 버추얼 어드레스를 가져옵니다.
         void* contents;
-        // 메모리에 접근가능한 포인터를 가져온다.
         result = vkMapMemory(device_, vertex_device_memory_, 0, sizeof(Vertex) * vertices.size(), 0, &contents);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -435,37 +492,46 @@ private:
         }
         assert(result == VK_SUCCESS);
 
-        // 버텍스 버퍼의 데이터를 메모리에 복사한다.
+        // 버텍스 정보를 메모리에 복사합니다.
         memcpy(contents, &vertices[0], sizeof(Vertex) * vertices.size());
 
-        // 메모리의 접근을 끝마친다.
-        // Vulkan의 경우 vkUnmapMemory를 항상 호출하지 않아도 된다.
-        // 처음에 한번만 vkMapMemory를 호출하고 반환된 주소값을 이용해 메모리를 계속 접근할 수 있다.
+        // CPU에서 메모리의 접근을 끝마칩니다.
         vkUnmapMemory(device_, vertex_device_memory_);
+
+        // CPU에서 메모리를 자주 접근하는 경우에 언맵을 하지 않고
+        // 맵을 통해 얻어온 버츄얼 어드레스를 계속 사용해도 됩니다.
     }
 
     void init_surface_()
     {
+        // 서피스는 윈도우 시스템마다 생성하는 API가 다릅니다.
+        // 하지만 서피스를 생성하기 위해서 필요한 정보와 근본적인 방법은 같다는 것을 알아차릴 수 있습니다.
+
 #if defined(__APPLE__)
         auto ns_window = (__bridge NSWindow*)window_->window();
         auto content_view = [ns_window contentView];
 
-        //
+        // 애플 운영 체제에서 벌칸은 메탈을 기반으로 동작합니다. 즉 벌칸 API를 메탈로 구현한 것입니다.
+        // 그러므로 애플 운영 체제에서 벌칸을 사용하기 위해선 CAMetalLayer에 대한 설정이 필요합니다.
         [content_view setLayer:[CAMetalLayer layer]];
 
+        // 생성하려는 서피스를 정의합니다.
         VkMacOSSurfaceCreateInfoMVK create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK;
         create_info.pView = (__bridge void*)content_view;
 
+        // 서피스를 생성합니다.
         auto result = vkCreateMacOSSurfaceMVK(instance_, &create_info, nullptr, &surface_);
 #elif defined(_WIN64)
+        // 생성하려는 서피스를 정의합니다.
         VkWin32SurfaceCreateInfoKHR create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
         create_info.hinstance = GetModuleHandle(NULL);
         create_info.hwnd = static_cast<HWND>(window_->window());
 
+        // 서피스를 생성합니다.
         auto result = vkCreateWin32SurfaceKHR(instance_, &create_info, nullptr, &surface_);
 #endif
         switch (result) {
@@ -483,56 +549,81 @@ private:
         }
         assert(result == VK_SUCCESS);
 
+        // 서피스의 지원 여부를 얻어올 변수를 선언합니다.
         VkBool32 supported;
+
+        // 물리 디바이스의 큐 패밀리가 서피스를 지원하는지 확인합니다.
         vkGetPhysicalDeviceSurfaceSupportKHR(physical_device_, queue_family_index_, surface_, &supported);
         assert(supported == VK_TRUE);
     }
 
     auto default_surface_format_()
     {
+        // 사용 가능한 서피스 포맷의 수를 얻기 위한 변수를 선언합니다.
         uint32_t count;
+
+        // 사용 가능한 서피스 포맷의 수를 얻어옵니다.
         vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device_, surface_, &count, nullptr);
 
-        vector<VkSurfaceFormatKHR> formats {count};
+        // 사용가능한 서피스 포맷들을 얻기 위한 변수를 선언합니다.
+        vector<VkSurfaceFormatKHR> formats;
+
+        // 사용가능한 서피스 포맷들을 얻기 위한 메모리를 할당합니다.
+        formats.resize(count);
+
+        // 사용가능한 서피스 포맷들을 얻어옵니다.
         vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device_, surface_, &count, &formats[0]);
 
+        // 어플리케이션은 여러 조건을 고려해서 최적의 서피스 포맷을 선택해야합니다.
+        // 예제의 간소화를 위해서 첫 번째 서피스 포맷을 사용합니다.
         return formats[0];
     }
 
     void init_swapchain_()
     {
         auto surface_format = default_surface_format_();
-        auto present_mode = VK_PRESENT_MODE_FIFO_KHR;
 
+        // 서피스의 능력을 얻기 위한 변수를 선언합니다.
         VkSurfaceCapabilitiesKHR surface_capabilities;
+
+        // 서피스의 능력을 얻어옵니다.
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device_, surface_, &surface_capabilities);
 
+        // 사용할 수 있는 컴포짓 알파 모드를 검색한다.
         VkCompositeAlphaFlagBitsKHR composite_alpha {static_cast<VkCompositeAlphaFlagBitsKHR>(0)};
-        for (auto i = 0; i != 32u; ++i) {
+
+        // 사용 가능한 컴포지트 알파 모드를 검색합니다.
+        for (auto i = 0; i != 32; ++i) {
             VkCompositeAlphaFlagBitsKHR flag = static_cast<VkCompositeAlphaFlagBitsKHR>(0x1 << i);
+
+            // 예제의 간소화를 위해 사용가능한 첫 번째 컴포지트 알파 모드를 사용합니다.
             if (surface_capabilities.supportedUsageFlags & flag) {
                 composite_alpha = flag;
                 break;
             }
         }
 
+        // 스왑체인 이미지의 크기를 저장합니다.
         swapchain_image_extent_ = surface_capabilities.currentExtent;
 
+        // 생성하려는 스왑체인을 정의합니다.
+        // 예제의 간소화를 위해 FIFO 프레젠트 모드를 사용합니다.
         VkSwapchainCreateInfoKHR create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
         create_info.surface = surface_;
-        create_info.minImageCount = 2;
+        create_info.minImageCount = 2; // 더블 버퍼링을 사용합니다.
         create_info.imageFormat = surface_format.format;
         create_info.imageColorSpace = surface_format.colorSpace;
-        create_info.imageExtent = swapchain_image_extent_;
-        create_info.imageArrayLayers = 1;
+        create_info.imageExtent = surface_capabilities.currentExtent;
+        create_info.imageArrayLayers = 1; // VR과 같은 특수한 경우를 제외하곤 항상 1입니다.
         create_info.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         create_info.preTransform = surface_capabilities.currentTransform;
         create_info.compositeAlpha = composite_alpha;
-        create_info.presentMode = present_mode;
+        create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
+        // 스왑체인을 생성합니다.
         auto result = vkCreateSwapchainKHR(device_, &create_info, nullptr, &swapchain_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -561,18 +652,32 @@ private:
 
     void init_swapchain_images_()
     {
+        // 사용 가능한 스왑체인 이미지의 개수를 얻기 위한 변수를 선언합니다.
         uint32_t count;
+
+        // 사용 가능한 스왑체인 이미지의 개수를 얻어옵니다.
         vkGetSwapchainImagesKHR(device_, swapchain_, &count, nullptr);
 
+        // 사용 가능한 스왑체인 이미지를 얻기 위한 메모리를 할당합니다.
         swapchain_images_.resize(count);
+
+        // 사용 가능한 스왑체인 이미지를 얻어옵니다.
         vkGetSwapchainImagesKHR(device_, swapchain_, &count, &swapchain_images_[0]);
 
+        // 스왑체인 생성시 정의한 이미지의 개수는 최소 이미지의 개수이기 때문에
+        // 실제로 더 많은 이미지가 생성될 수 있습니다.
+
+        // 커맨드를 기록하기 위해 커맨드 버퍼의 사용목적을 정의한다.
         VkCommandBufferBeginInfo begin_info {};
 
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+        // 커맨드 버퍼에 커맨드 기록을 시작한다.
         vkBeginCommandBuffer(command_buffer_, &begin_info);
 
+        // 스왑체인 이미지의 레이아웃을 PRESENT_SRC로 변경하는 배리어를 정의한다.
+        // PRESENT_SRC로 변경하는 이유는 렌더링을 위한 커맨드를 단순화하기 위해서이다.
         vector<VkImageMemoryBarrier> barriers;
         for (auto& image : swapchain_images_) {
             VkImageMemoryBarrier barrier {};
@@ -590,6 +695,7 @@ private:
             barriers.push_back(barrier);
         }
 
+        // 정의된 배리어를 실행하는 커맨드를 커맨드 버퍼에 기록한다.
         vkCmdPipelineBarrier(command_buffer_,
                              VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                              0,
@@ -597,23 +703,30 @@ private:
                              0, nullptr,
                              barriers.size(), &barriers[0]);
 
+        // 커맨드 버퍼에 커맨드 기록을 끝마친다.
         vkEndCommandBuffer(command_buffer_);
 
+        // 어떤 기록된 커맨드를 큐에 제출할지 정의한다.
         VkSubmitInfo submit_info {};
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer_;
 
+        // 기록된 커맨드를 큐에 제출한다.
         vkQueueSubmit(queue_, 1, &submit_info, VK_NULL_HANDLE);
 
+        // 커맨드 버퍼들이 모두 처리될 때까지 기다린다.
         vkDeviceWaitIdle(device_);
     }
 
     void init_swapchain_image_views_()
     {
+        // 그래픽스 파이프라인에서 이미지를 접근하기 위해선 이미지 뷰가 필요합니다.
+
         auto surface_format = default_surface_format_();
 
+        // 생성하려는 이미지 뷰를 정의합니다.
         VkImageViewCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -623,10 +736,14 @@ private:
         create_info.subresourceRange.levelCount = 1;
         create_info.subresourceRange.layerCount = 1;
 
+        // 이미지 뷰를 위한 메모리를 할당합니다.
         swapchain_image_views_.resize(swapchain_images_.size());
+
         for (auto i = 0; i != swapchain_images_.size(); ++i) {
+            // 이미지 뷰를 생성할 이미지를 정의합니다.
             create_info.image = swapchain_images_[i];
 
+            // 이미지 뷰를 생성합니다.
             auto result = vkCreateImageView(device_, &create_info, nullptr, &swapchain_image_views_[i]);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -646,6 +763,7 @@ private:
     {
         auto surface_format = default_surface_format_();
 
+        // 렌더패스의 어태치먼트를 정의합니다.
         VkAttachmentDescription attachment_desc {};
 
         attachment_desc.format = surface_format.format;
@@ -655,17 +773,20 @@ private:
         attachment_desc.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         attachment_desc.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+        // 서브패스에서 렌더패스의 어떤 어태치먼트를 참조할지 정의합니다.
         VkAttachmentReference color_attachment_ref {};
 
         color_attachment_ref.attachment = 0;
         color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+        // 렌더패스의 서브패스를 정의합니다.
         VkSubpassDescription subpass_desc {};
 
         subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass_desc.colorAttachmentCount = 1;
         subpass_desc.pColorAttachments = &color_attachment_ref;
 
+        // 렌더패스를 정의합니다.
         VkRenderPassCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -674,6 +795,7 @@ private:
         create_info.subpassCount = 1;
         create_info.pSubpasses = &subpass_desc;
 
+        // 렌더패스를 생성합니다.
         auto result = vkCreateRenderPass(device_, &create_info, nullptr, &render_pass_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -690,6 +812,7 @@ private:
 
     void init_framebuffers_()
     {
+        // 생성하려는 프레임버퍼를 정의합니다.
         VkFramebufferCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -699,10 +822,13 @@ private:
         create_info.height = swapchain_image_extent_.height;
         create_info.layers = 1;
 
+        // 프레임버퍼를 위한 메모리를 할당합니다.
         framebuffers_.resize(swapchain_image_views_.size());
+
         for (auto i = 0; i != swapchain_image_views_.size(); ++i) {
             create_info.pAttachments = &swapchain_image_views_[i];
 
+            // 프레임버퍼를 생성합니다.
             auto result = vkCreateFramebuffer(device_, &create_info, nullptr, &framebuffers_[i]);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -725,26 +851,29 @@ private:
                 // 더이상 셰이더 안에서 정의되어있던 버텍스 정보를 사용하지 않고 버텍스 버퍼로부터 데이터를 읽어온다.
                 "precision mediump float;                 \n"
                 "                                         \n"
-                "layout(location = 0) in vec2 i_pos;      \n"
+                "layout(location = 0) in vec3 i_pos;      \n"
                 "layout(location = 1) in vec3 i_col;      \n"
                 "                                         \n"
                 "layout(location = 0) out vec3 o_col;     \n"
                 "                                         \n"
                 "void main() {                            \n"
                 "                                         \n"
-                "    gl_Position = vec4(i_pos, 0.0, 1.0); \n"
+                "    gl_Position = vec4(i_pos, 1.0); \n"
                 "    o_col = i_col;                       \n"
                 "}                                        \n"
             };
 
+            // 런타임 컴파일러를 사용해서 VKSL을 SPIRV로 컴파일합니다,
             auto spirv = Spirv_compiler().compile(Shader_type::vertex, vksl);
 
+            // 생성하려는 셰이더 모듈을 정의합니다.
             VkShaderModuleCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             create_info.codeSize = spirv.size() * sizeof(uint32_t);
             create_info.pCode = &spirv[0];
 
+            // 셰이더 모듈을 생성합니다.
             auto result = vkCreateShaderModule(device_, &create_info, nullptr, &shader_modules_[0]);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -772,14 +901,17 @@ private:
                 "}                                               \n"
             };
 
+            // 런타임 컴파일러를 사용해서 VKSL을 SPIRV로 컴파일합니다,
             auto spirv = Spirv_compiler().compile(Shader_type::fragment, vksl);
 
+            // 생성하려는 셰이더 모듈을 정의합니다.
             VkShaderModuleCreateInfo create_info {};
 
             create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             create_info.codeSize = spirv.size() * sizeof(uint32_t);
             create_info.pCode = &spirv[0];
 
+            // 셰이더 모듈을 생성합니다.
             auto result = vkCreateShaderModule(device_, &create_info, nullptr, &shader_modules_[1]);
             switch (result) {
                 case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -797,10 +929,12 @@ private:
 
     void init_pipeline_layout_()
     {
+        // 생성하려는 파이프라인 레이아웃을 정의합니다.
         VkPipelineLayoutCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
+        // 파이프라인 레이아웃을 생성합니다.
         auto result = vkCreatePipelineLayout(device_, &create_info, nullptr, &pipeline_layout_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -817,9 +951,11 @@ private:
 
     void init_pipeline_()
     {
+        // 파이프라인 셰이더 스테이지들을 정의합니다.
         array<VkPipelineShaderStageCreateInfo, 2> stages;
 
         {
+            // 생성하려는 파이프라인 버텍스 셰이더 스테이지를 정의합니다.
             VkPipelineShaderStageCreateInfo stage {};
 
             stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -831,6 +967,7 @@ private:
         }
 
         {
+            // 생성하려는 파이프라인 프래그먼트 셰이더 스테이지를 정의합니다.
             VkPipelineShaderStageCreateInfo stage {};
 
             stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -841,7 +978,7 @@ private:
             stages[1] = stage;
         }
 
-        // 버텍스 인풋 바인딩을 정의한다.
+        // 버텍스 인풋 바인딩을 정의합니다.
         VkVertexInputBindingDescription vertex_input_binding {};
 
         vertex_input_binding.binding = 0;
@@ -851,44 +988,45 @@ private:
         vector<VkVertexInputAttributeDescription> vertex_input_attributes;
 
         {
-            // 위치에 대한 버텍스 인풋 어트리뷰트를 정의한다.
+            // 위치에 대한 버텍스 인풋 애트리뷰트를 정의합니다.
             VkVertexInputAttributeDescription vertex_input_attribute {};
 
             vertex_input_attribute.location = 0; // 셰이더에서 정의한 로케이션
-            vertex_input_attribute.binding = 0; // 버텍스 버퍼의 바인딩 인덱스
-            vertex_input_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+            vertex_input_attribute.binding = 0;  // 버텍스 버퍼의 바인딩 인덱스
+            vertex_input_attribute.format = VK_FORMAT_R32G32B32_SFLOAT;
             vertex_input_attribute.offset = offsetof(Vertex, x);
 
             vertex_input_attributes.push_back(vertex_input_attribute);
         }
 
         {
-            // 색상에 대한 버텍스 인풋 어트리뷰트를 정의한다.
+            // 색상에 대한 버텍스 인풋 애트리뷰트를 정의한다.
             VkVertexInputAttributeDescription vertex_input_attribute {};
 
             vertex_input_attribute.location = 1; // 셰이더에서 정의한 로케이션
-            vertex_input_attribute.binding = 0; // 버텍스 버퍼의 바인딩 인덱스
+            vertex_input_attribute.binding = 0;  // 버텍스 버퍼의 바인딩 인덱스
             vertex_input_attribute.format = VK_FORMAT_R32G32B32_SFLOAT;
             vertex_input_attribute.offset = offsetof(Vertex, r);
 
             vertex_input_attributes.push_back(vertex_input_attribute);
         }
 
-        // 파이프라인 버텍스 인풋 스테이지를 정의한다.
+        // 파이프라인 버텍스 인풋 스테이지를 정의합니다.
         VkPipelineVertexInputStateCreateInfo vertex_input_state {};
 
+        vertex_input_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vertex_input_state.vertexBindingDescriptionCount = 1;
         vertex_input_state.pVertexBindingDescriptions = &vertex_input_binding;
         vertex_input_state.vertexAttributeDescriptionCount = vertex_input_attributes.size();
         vertex_input_state.pVertexAttributeDescriptions = &vertex_input_attributes[0];
 
-        vertex_input_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
+        // 파이프라인 인풋 어셈블리 스테이지를 정의합니다.
         VkPipelineInputAssemblyStateCreateInfo input_assembly_state {};
 
         input_assembly_state.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         input_assembly_state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
+        // 뷰포트를 정의합니다.
         VkViewport viewport {};
 
         viewport.width = swapchain_image_extent_.width;
@@ -896,10 +1034,12 @@ private:
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
 
+        // 시져 영역을 정의합니다.
         VkRect2D scissor {};
 
         scissor.extent = swapchain_image_extent_;
 
+        // 파이프라인 뷰포트 스테이지를 정의합니다.
         VkPipelineViewportStateCreateInfo viewport_state {};
 
         viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -908,6 +1048,7 @@ private:
         viewport_state.scissorCount = 1;
         viewport_state.pScissors = &scissor;
 
+        // 파이프라인 래스터라이제이션 스테이지를 정의합니다.
         VkPipelineRasterizationStateCreateInfo rasterization_state {};
 
         rasterization_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -915,15 +1056,20 @@ private:
         rasterization_state.cullMode = VK_CULL_MODE_NONE;
         rasterization_state.lineWidth = 1.0f;
 
+        // 파이프라인 멀티샘플 스테이지를 정의합니다.
+        // 멀티샘플을 사용하지 않는 경우 래스터라이제이션 샘플 개수를 1로 정의해야합니다.
         VkPipelineMultisampleStateCreateInfo multisample_state {};
 
         multisample_state.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisample_state.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
+        // 파이프라인 뎁스 스텐실 스테이지를 정의합니다.
         VkPipelineDepthStencilStateCreateInfo depth_stencil_state {};
 
         depth_stencil_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 
+        // 파이프라인 컬러 블렌드 어테치먼트에 대해 정의합니다.
+        // colorWriteMask가 0이면 프래그먼트의 결과가 이미지에 기록되지 않습니다.
         VkPipelineColorBlendAttachmentState attachment {};
 
         attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
@@ -931,12 +1077,14 @@ private:
                                   | VK_COLOR_COMPONENT_B_BIT
                                   | VK_COLOR_COMPONENT_A_BIT;
 
+        // 파이프라인 컬러 블렌드 스테이지를 정의합니다.
         VkPipelineColorBlendStateCreateInfo color_blend_state {};
 
         color_blend_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         color_blend_state.attachmentCount = 1;
         color_blend_state.pAttachments = &attachment;
 
+        // 생성하려는 그래픽스 파이프라인을 정의합니다.
         VkGraphicsPipelineCreateInfo create_info {};
 
         create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -952,6 +1100,7 @@ private:
         create_info.layout = pipeline_layout_;
         create_info.renderPass = render_pass_;
 
+        // 그래픽스 파이프라인을 생성합니다.
         auto result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &create_info, nullptr, &pipeline_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -968,79 +1117,93 @@ private:
 
     void fini_instance_()
     {
+        // 생성한 인스턴스를 파괴합니다.
         vkDestroyInstance(instance_, nullptr);
     }
 
     void fini_device_()
     {
+        // 생성한 디바이스를 파괴합니다.
         vkDestroyDevice(device_, nullptr);
     }
 
     void fini_command_pool_()
     {
+        // 생성한 커맨드 풀을 파괴합니다.
+        // 커맨드 풀이 파괴되면 커맨드 버퍼도 파괴됩니다.
         vkDestroyCommandPool(device_, command_pool_, nullptr);
     }
 
     void fini_semaphores_()
     {
+        // 생성한 세마포어를 파괴합니다.
         for (auto& semaphore : semaphores_)
             vkDestroySemaphore(device_, semaphore, nullptr);
     }
 
     void fini_fence_()
     {
+        // 생성한 펜스를 파괴합니다.
         vkDestroyFence(device_, fence_, nullptr);
     }
 
     void fini_vertex_resources_()
     {
-        // 할당된 메모리를 해제한다.
+        // 할당된 메모리를 해제합니다.
         vkFreeMemory(device_, vertex_device_memory_, nullptr);
 
-        // 생성된 버퍼를 파괴한다.
+        // 생성된 버퍼를 파괴합니다.
         vkDestroyBuffer(device_, vertex_buffer_, nullptr);
     }
 
     void fini_surface_()
     {
+        // 생성한 서피스를 파괴합니다.
         vkDestroySurfaceKHR(instance_, surface_, nullptr);
     }
 
     void fini_swapchain_()
     {
+        // 생성한 스왑체인을 파괴합니다.
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
     }
 
     void fini_swapchain_image_views_()
     {
+        // 생성한 이미지 뷰를 파괴합니다.
         for (auto& image_view : swapchain_image_views_)
             vkDestroyImageView(device_, image_view, nullptr);
     }
 
     void fini_render_pass_()
     {
+        // 생성한 렌더 패스를 파괴합니다.
         vkDestroyRenderPass(device_, render_pass_, nullptr);
     }
 
     void fini_framebuffers_()
     {
+        // 생성한 프레임버퍼를 파괴합니다.
         for (auto& framebuffer : framebuffers_)
             vkDestroyFramebuffer(device_, framebuffer, nullptr);
     }
 
     void fini_shader_modules_()
     {
+        // 생성한 셰이더 모듈을 파괴합니다.
         for (auto& shader_module : shader_modules_)
             vkDestroyShaderModule(device_, shader_module, nullptr);
     }
 
     void fini_pipeline_layout_()
     {
+        // 생성한 파이프라인 레이아웃을 파괴합니다.
         vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
     }
 
     void fini_pipeline_()
     {
+        // 생성한 그래픽스 파이프라인을 파괴합니다.
         vkDestroyPipeline(device_, pipeline_, nullptr);
     }
 
@@ -1073,28 +1236,44 @@ private:
 
     void on_render()
     {
+        // 스왑체인으로부터 사용가능한 이미지 인덱스를 얻어옵니다.
+        // 세마포어를 통해서 GPU에서 스왑체인 이미지가 언제 사용 가능한지 알 수 있습니다.
         uint32_t swapchain_index;
         vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
                               semaphores_[image_available_index], VK_NULL_HANDLE,
                               &swapchain_index);
 
+        auto& swapchain_image = swapchain_images_[swapchain_index];
+
+        // 새로운 프레임을 렌더링하기 위해선 제출한 커맨드 버퍼가 처리되었는지를 확인해야합니다.
+        // 다 처리되었는지를 알기 위해서 큐에 커맨드 버퍼를 제출할 때 파라미터로 펜스를 넘길 수 있습니다.
+        // 커맨드 버퍼를 리셋하기 전에 펜스의 상태를 확인한 뒤 언시그널드 상태이면 시그널 상태가 될 때까지 기다립니다.
         if (VK_NOT_READY == vkGetFenceStatus(device_, fence_))
             vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX);
 
+        // 펜스를 언시그널 상태로 변경합니다.
         vkResetFences(device_, 1, &fence_);
+
+        // 커맨드 버퍼를 재사용하기 위해서 커맨드 버퍼를 리셋합니다.
         vkResetCommandBuffer(command_buffer_, 0);
+        // 커맨드 버퍼에 기록하는 커맨드들은 변하지 않기 때문에 다시 기록할 필요는 없습니다.
+        // 하지만 일반적인 경우에 매 프레임마다 필요한 커맨드들이 다르기 때문에 리셋하고 다시 기록합니다.
 
-        auto& swapchain_image = swapchain_images_[swapchain_index];
-
+        // 커맨드를 기록하기 위해 커맨드 버퍼를 기록중 상태로 전이할 때 필요한 정보를 정의합니다.
         VkCommandBufferBeginInfo begin_info {};
 
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+        // 커맨드 버퍼를 기록중 상태로 전이합니다.
         vkBeginCommandBuffer(command_buffer_, &begin_info);
 
         {
+            // 이미지 배리어를 정의하기 위한 변수를 선언합니다.
             VkImageMemoryBarrier barrier {};
 
+            // 이미지 배리어를 정의합니다.
+            // 이미지에 렌더링을 하기 위해서는 COLOR_ATTACHMENT_OPTIMAL이어야 합니다.
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -1113,13 +1292,16 @@ private:
                                  1, &barrier);
         }
 
+        // 클리어 색상을 정의하기 위한 변수를 선언합니다.
         VkClearValue clear_value;
 
+        // 클리어 색상을 정의합니다.
         clear_value.color.float32[0] = 0.15f; // R
         clear_value.color.float32[1] = 0.15f; // G
         clear_value.color.float32[2] = 0.15f; // B
         clear_value.color.float32[3] = 1.0f; // A
 
+        // 렌더 패스를 어떻게 시작할지 정의합니다.
         VkRenderPassBeginInfo render_pass_begin_info {};
 
         render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1129,20 +1311,30 @@ private:
         render_pass_begin_info.clearValueCount = 1;
         render_pass_begin_info.pClearValues = &clear_value;
 
+        // 렌더 패스를 시작합니다.
         vkCmdBeginRenderPass(command_buffer_, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-        // 사용할 버텍스 버퍼를 바인딩 한다.
+        // 삼각형을 그리기 위해 필요한 버텍스 버퍼를 0번에 바인드 합니다.
         VkDeviceSize vertex_buffer_offset {0};
         vkCmdBindVertexBuffers(command_buffer_, 0, 1, &vertex_buffer_, &vertex_buffer_offset);
 
+        // 삼각형을 그리기 위한 그래픽스 파이프라인을 바인딩합니다.
         vkCmdBindPipeline(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+
+        // 삼각형을 그리기 위한 드로우 커맨드를 기록합니다.
         vkCmdDraw(command_buffer_, 3, 1, 0, 0);
 
+        // 렌더 패스를 종료합니다.
         vkCmdEndRenderPass(command_buffer_);
 
         {
+            // 이미지 배리어를 정의하기 위한 변수를 선언합니다.
             VkImageMemoryBarrier barrier {};
 
+            // 이미지 배리어를 정의합니다. 이미지를 화면에 출력하기 위해서는
+            // 이미지 레이아웃이 반드시 아래 레이아웃 중에 한 레이아웃이어야 합니다.
+            // - PRESENT_SRC_KHR
+            // - SHARED_PRESENT_KHR
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -1153,6 +1345,7 @@ private:
             barrier.subresourceRange.levelCount = 1;
             barrier.subresourceRange.layerCount = 1;
 
+            // 이미지 레이아웃 변경을 위한 파이프라인 배리어 커맨드를 기록합니다.
             vkCmdPipelineBarrier(command_buffer_,
                                  VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                                  0,
@@ -1161,32 +1354,45 @@ private:
                                  1, &barrier);
         }
 
+        // 필요한 모든 커맨드들을 기록했기 때문에 커맨드 버퍼의 커맨드 기록을 끝마칩니다.
+        // 커맨드 버퍼의 상태는 실행 가능 상태입니다.
         vkEndCommandBuffer(command_buffer_);
 
+        // 세마포어가 반드시 시그널 되야하는 파이프라인 스테이지를 정의합니다.
         constexpr VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
+        // 큐에 제출할 커맨드 버퍼와 동기화를 정의하기 위한 변수를 선언합니다.
         VkSubmitInfo submit_info {};
 
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        // 픽셀의 결과를 계산한 후에 스왑체인 이미지가 준비될 때까지 기다립니다.
+        // 기다리지 않고 픽셀의 결과를 쓴다면 원하지 않는 결과가 화면에 출력됩니다.
         submit_info.waitSemaphoreCount = 1;
         submit_info.pWaitSemaphores = &semaphores_[image_available_index];
         submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &command_buffer_;
+        // 결과를 올바르게 출력하기 위해선 커맨드 버퍼가 처리될 때까지 기다려야합니다,
+        // 커맨드 버퍼가 처리된 시점을 알려주는 세마포어를 정의합니다.
         submit_info.signalSemaphoreCount = 1;
         submit_info.pSignalSemaphores = &semaphores_[rendering_done_index];
 
+        // 큐에 커맨드 버퍼를 제출합니다.
         vkQueueSubmit(queue_, 1, &submit_info, fence_);
 
+        // 화면에 출력되는 이미지를 정의합니다.
         VkPresentInfoKHR present_info {};
 
         present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        // 커맨드 버퍼가 처리되기를 보장하기 위해 기다려야하는 세마포어를 정의합니다.
+        // 기다리지 않고 출력한다면 원하지 않는 결과가 화면에 출력됩니다.
         present_info.waitSemaphoreCount = 1;
         present_info.pWaitSemaphores = &semaphores_[rendering_done_index];
         present_info.swapchainCount = 1;
         present_info.pSwapchains = &swapchain_;
         present_info.pImageIndices = &swapchain_index;
 
+        // 화면에 이미지를 출력합니다.
         vkQueuePresentKHR(queue_, &present_info);
     }
 
