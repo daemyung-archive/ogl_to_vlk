@@ -170,6 +170,7 @@ private:
 
     void init_physical_device_memory_properties_()
     {
+        // 물리 디바이스 메모리 성질을 얻어옵니다.
         vkGetPhysicalDeviceMemoryProperties(physical_device_, &physical_device_memory_properties_);
     }
 
@@ -890,7 +891,7 @@ private:
 
         {
             const string vksl = {
-                "precision mediump float;                     \n"
+                "precision mediump float;                        \n"
                 "                                                \n"
                 "layout(location = 0) in vec3 i_col;             \n"
                 "                                                \n"
