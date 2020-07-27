@@ -864,7 +864,7 @@ private:
                 "}                                        \n"
             };
 
-            // 런타임 컴파일러를 사용해서 VKSL을 SPIRV로 컴파일합니다,
+            // 런타임 컴파일러를 사용해서 VKSL을 SPIRV로 컴파일합니다.
             auto spirv = Spirv_compiler().compile(Shader_type::vertex, vksl);
 
             // 생성하려는 셰이더 모듈을 정의합니다.
@@ -902,7 +902,7 @@ private:
                 "}                                               \n"
             };
 
-            // 런타임 컴파일러를 사용해서 VKSL을 SPIRV로 컴파일합니다,
+            // 런타임 컴파일러를 사용해서 VKSL을 SPIRV로 컴파일합니다.
             auto spirv = Spirv_compiler().compile(Shader_type::fragment, vksl);
 
             // 생성하려는 셰이더 모듈을 정의합니다.
