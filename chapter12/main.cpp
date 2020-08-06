@@ -1292,7 +1292,7 @@ private:
         // layout(set = 0, location = Y)에 해당하는 리소스들의 디스크립터 셋 레이아웃입니다.
         create_info.pSetLayouts = &material_descriptor_set_layout_;
 
-        // 파이프라인 레이아웃을 정의합니다.
+        // 파이프라인 레이아웃을 생성합니다.
         auto result = vkCreatePipelineLayout(device_, &create_info, nullptr, &pipeline_layout_);
         switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -1585,9 +1585,10 @@ private:
 
     void fini_uniform_resources_()
     {
-        // 할당된 유니폼 메모리를 해제한다.
+        // 할당된 메모리를 해제합니다.
         vkFreeMemory(device_, uniform_device_memory_, nullptr);
-        // 생성된 유니폼 버퍼를 파괴한다.
+
+        // 생성된 버퍼를 파괴합니다.
         vkDestroyBuffer(device_, uniform_buffer_, nullptr);
     }
 
