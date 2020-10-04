@@ -31,6 +31,7 @@ cmake -G Xcode ..
 ## 목차
 
 삼각형을 그리기 위해 반드시 알아야하는 내용에 대해 설명합니다.
+원래 책으로 출판하려 했으나 흥미를 끌만한 내용이 부족하고 데모가 너무 간단하다는 의견이 있어서 출판을 포기하고 작성된 [문서](https://docs.google.com/document/d/1SWICNMyYS0egmK_vxbDvWTg3-vRuB9BdEQzlVJEK7rc/edit?usp=sharing)를 공개합니다.
 
 ### 01장. Vulkan 이란?
 
